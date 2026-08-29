@@ -1,1 +1,35 @@
-@import "tailwindcss";
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family:
+    "Segoe UI",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  background: #F5F7FA;
+  color: #1F2937;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}

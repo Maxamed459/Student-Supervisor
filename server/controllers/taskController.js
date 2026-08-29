@@ -1,0 +1,515 @@
+const Task = require("../models/Task");
+const Group = require("../models/Group");
+const Supervisor = require("../models/Supervisor");
+const {
+  getStudentProfile,
+  getSupervisorProfile,
+  studentBelongsToSupervisor,
+} = require("../utils/accessHelpers");
+
+const populateTask = (query) =>
+  query
+    .populate({
+      path: "assignedTo",
+      populate: [
+        { path: "user", select: "name email" },
+        { path: "department", select: "name code" },
+      ],
+    })
+    .populate("group", "name code")
+    .populate({
+      path: "assignedBy",
+      populate: { path: "user", select: "name email" },
+    });
+
+const createTask = async (req, res) => {
+  try {
+    let supervisor = await getSupervisorProfile(req.user._id);
+
+    // Admin without a supervisor profile can create on behalf of a supervisor
+    if (!supervisor && req.user.role === "admin") {
+      const { assignedBy } = req.body;
+
+      if (!assignedBy) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Select a supervisor (assignedBy) when creating a task as admin",
+        });
+      }
+
+      supervisor = await Supervisor.findById(assignedBy);
+
+      if (!supervisor) {
+        return res.status(404).json({
+          success: false,
+          message: "Supervisor not found",
+        });
+      }
+    }
+
+    if (!supervisor) {
+      return res.status(404).json({
+        success: false,
+        message: "Supervisor profile not found",
+      });
+    }
+
+    const {
+      title,
+      description,
+      dueDate,
+      assignedTo,
+      group,
+      priority,
+      assignToGroup,
+    } = req.body;
+
+    if (!title?.trim() || !dueDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and due date are required",
+      });
+    }
+
+    const due = new Date(dueDate);
+    if (Number.isNaN(due.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid due date is required",
+      });
+    }
+
+    const allowedPriorities = ["low", "medium", "high"];
+    const taskPriority = priority || "medium";
+
+    if (!allowedPriorities.includes(taskPriority)) {
+      return res.status(400).json({
+        success: false,
+        message: "Priority must be low, medium, or high",
+      });
+    }
+
+    let groupId = group || null;
+    let groupRecord = null;
+    let studentIds = [];
+
+    if (groupId) {
+      groupRecord = await Group.findById(groupId);
+
+      if (
+        !groupRecord ||
+        groupRecord.supervisor?.toString() !==
+          supervisor._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Invalid group for this supervisor",
+        });
+      }
+    }
+
+    const assignWholeGroup =
+      assignToGroup === true ||
+      assignToGroup === "true" ||
+      (!assignedTo && groupId);
+
+    if (assignWholeGroup) {
+      if (!groupRecord) {
+        return res.status(400).json({
+          success: false,
+          message: "Group is required when assigning to a whole group",
+        });
+      }
+
+      studentIds = groupRecord.members.map((id) => id.toString());
+
+      if (!studentIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Selected group has no members",
+        });
+      }
+    } else {
+      if (!assignedTo) {
+        return res.status(400).json({
+          success: false,
+          message: "Assigned student or group is required",
+        });
+      }
+
+      const allowed = await studentBelongsToSupervisor(
+        assignedTo,
+        supervisor._id
+      );
+
+      if (!allowed) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You can only assign tasks to students in your groups",
+        });
+      }
+
+      if (groupRecord) {
+        const isMember = groupRecord.members.some(
+          (id) => id.toString() === assignedTo.toString()
+        );
+
+        if (!isMember) {
+          return res.status(400).json({
+            success: false,
+            message: "Student is not a member of the selected group",
+          });
+        }
+      }
+
+      studentIds = [assignedTo.toString()];
+    }
+
+    const created = await Task.insertMany(
+      studentIds.map((studentId) => ({
+        title: title.trim(),
+        description: description?.trim() || "",
+        dueDate: due,
+        assignedTo: studentId,
+        group: groupId,
+        assignedBy: supervisor._id,
+        priority: taskPriority,
+        status: "pending",
+      }))
+    );
+
+    const populated = await populateTask(
+      Task.find({
+        _id: { $in: created.map((task) => task._id) },
+      }).sort({ createdAt: -1 })
+    );
+
+    return res.status(201).json({
+      success: true,
+      message:
+        created.length > 1
+          ? `Task assigned to ${created.length} students`
+          : "Task created successfully",
+      count: created.length,
+      data: populated,
+      tasks: populated,
+      task: populated[0],
+    });
+  } catch (error) {
+    console.error("Create task error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create task",
+    });
+  }
+};
+
+const getTasks = async (req, res) => {
+  try {
+    let filter = {};
+
+    if (req.user.role === "student") {
+      const student = await getStudentProfile(req.user._id);
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: "Student profile not found",
+        });
+      }
+      filter.assignedTo = student._id;
+    } else if (req.user.role === "supervisor") {
+      const supervisor = await getSupervisorProfile(req.user._id);
+      if (!supervisor) {
+        return res.status(404).json({
+          success: false,
+          message: "Supervisor profile not found",
+        });
+      }
+      filter.assignedBy = supervisor._id;
+    }
+
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
+    const tasks = await populateTask(
+      Task.find(filter).sort({ dueDate: 1, createdAt: -1 })
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Tasks fetched successfully",
+      count: tasks.length,
+      data: tasks,
+      tasks,
+    });
+  } catch (error) {
+    console.error("Get tasks error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tasks",
+    });
+  }
+};
+
+const getTaskById = async (req, res) => {
+  try {
+    const task = await populateTask(Task.findById(req.params.id));
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    if (req.user.role === "student") {
+      const student = await getStudentProfile(req.user._id);
+      if (
+        !student ||
+        task.assignedTo._id.toString() !== student._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only view your own tasks",
+        });
+      }
+    }
+
+    if (req.user.role === "supervisor") {
+      const supervisor = await getSupervisorProfile(req.user._id);
+      if (
+        !supervisor ||
+        task.assignedBy._id.toString() !== supervisor._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only view tasks you created",
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Task fetched successfully",
+      data: task,
+      task,
+    });
+  } catch (error) {
+    console.error("Get task by ID error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch task",
+    });
+  }
+};
+
+const updateTask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    if (req.user.role === "supervisor" || req.user.role === "admin") {
+      if (req.user.role === "supervisor") {
+        const supervisor = await getSupervisorProfile(req.user._id);
+        if (
+          !supervisor ||
+          task.assignedBy.toString() !== supervisor._id.toString()
+        ) {
+          return res.status(403).json({
+            success: false,
+            message: "You can only update tasks you created",
+          });
+        }
+      }
+
+      const {
+        title,
+        description,
+        dueDate,
+        priority,
+        status,
+        assignedTo,
+        group,
+      } = req.body;
+
+      if (assignedTo && req.user.role === "supervisor") {
+        const supervisor = await getSupervisorProfile(req.user._id);
+        const allowed = await studentBelongsToSupervisor(
+          assignedTo,
+          supervisor._id
+        );
+        if (!allowed) {
+          return res.status(403).json({
+            success: false,
+            message:
+              "You can only assign tasks to students in your groups",
+          });
+        }
+      }
+
+      if (assignedTo) task.assignedTo = assignedTo;
+      if (title !== undefined) task.title = title.trim();
+      if (description !== undefined) {
+        task.description = description.trim();
+      }
+      if (dueDate !== undefined) task.dueDate = dueDate;
+      if (priority !== undefined) task.priority = priority;
+      if (status !== undefined) task.status = status;
+      if (group !== undefined) task.group = group || null;
+    } else if (req.user.role === "student") {
+      const student = await getStudentProfile(req.user._id);
+      if (
+        !student ||
+        task.assignedTo.toString() !== student._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only update your own tasks",
+        });
+      }
+
+      const { status, submissionNote } = req.body;
+      const allowed = ["pending", "in_progress", "completed"];
+
+      if (status && !allowed.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid task status",
+        });
+      }
+
+      if (status) task.status = status;
+      if (submissionNote !== undefined) {
+        task.submissionNote = submissionNote.trim();
+      }
+
+      if (status === "completed") {
+        task.submittedAt = new Date();
+      }
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
+    }
+
+    await task.save();
+
+    const populated = await populateTask(Task.findById(task._id));
+
+    return res.status(200).json({
+      success: true,
+      message: "Task updated successfully",
+      data: populated,
+      task: populated,
+    });
+  } catch (error) {
+    console.error("Update task error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update task",
+    });
+  }
+};
+
+const deleteTask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    if (req.user.role === "supervisor") {
+      const supervisor = await getSupervisorProfile(req.user._id);
+      if (
+        !supervisor ||
+        task.assignedBy.toString() !== supervisor._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only delete tasks you created",
+        });
+      }
+    }
+
+    await task.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "Task deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete task error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete task",
+    });
+  }
+};
+
+const getTaskStats = async (req, res) => {
+  try {
+    let base = {};
+
+    if (req.user.role === "supervisor") {
+      const supervisor = await getSupervisorProfile(req.user._id);
+
+      if (!supervisor) {
+        return res.status(404).json({
+          success: false,
+          message: "Supervisor profile not found",
+        });
+      }
+
+      base = { assignedBy: supervisor._id };
+    }
+
+    const [pending, inProgress, completed] = await Promise.all([
+      Task.countDocuments({ ...base, status: "pending" }),
+      Task.countDocuments({ ...base, status: "in_progress" }),
+      Task.countDocuments({ ...base, status: "completed" }),
+    ]);
+
+    const stats = {
+      pending,
+      inProgress,
+      completed,
+      total: pending + inProgress + completed,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Task stats fetched successfully",
+      data: stats,
+      stats,
+    });
+  } catch (error) {
+    console.error("Get task stats error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch task stats",
+    });
+  }
+};
+
+module.exports = {
+  createTask,
+  getTasks,
+  getTaskById,
+  updateTask,
+  deleteTask,
+  getTaskStats,
+};
