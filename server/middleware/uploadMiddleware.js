@@ -1,25 +1,7 @@
 const path = require("path");
-const fs = require("fs");
 const multer = require("multer");
 
-const uploadDir = path.join(__dirname, "..", "uploads", "documents");
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const safeName = file.originalname
-      .replace(/\s+/g, "-")
-      .replace(/[^a-zA-Z0-9._-]/g, "");
-    cb(null, `${unique}-${safeName}`);
-  },
-});
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 
 const allowedMimeTypes = new Set([
   "application/pdf",
@@ -32,22 +14,45 @@ const allowedMimeTypes = new Set([
   "text/plain",
   "image/png",
   "image/jpeg",
+  "image/jpg",
+  "image/webp",
 ]);
+
+const allowedExtensions = new Set([
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".xls",
+  ".xlsx",
+  ".txt",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+]);
+
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
   limits: {
-    fileSize: 15 * 1024 * 1024,
+    fileSize: MAX_FILE_SIZE,
   },
   fileFilter: (req, file, cb) => {
-    if (allowedMimeTypes.has(file.mimetype)) {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    const mimeOk = allowedMimeTypes.has(file.mimetype);
+    const extOk = allowedExtensions.has(ext);
+
+    if (mimeOk || extOk) {
       cb(null, true);
       return;
     }
 
     cb(
       new Error(
-        "Unsupported file type. Allowed: PDF, Word, PowerPoint, Excel, text, PNG, JPG"
+        "Unsupported file type. Allowed: PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, TXT, PNG, JPG, WEBP"
       )
     );
   },
@@ -55,5 +60,7 @@ const upload = multer({
 
 module.exports = {
   upload,
-  uploadDir,
+  MAX_FILE_SIZE,
+  allowedMimeTypes,
+  allowedExtensions,
 };

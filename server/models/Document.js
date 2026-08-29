@@ -8,15 +8,10 @@ const documentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Document category (thesis, proposal, etc.) — also exposed as documentType
     type: {
       type: String,
-      enum: [
-        "thesis",
-        "project_book",
-        "proposal",
-        "report",
-        "other",
-      ],
+      enum: ["thesis", "project_book", "proposal", "report", "other"],
       required: true,
     },
 
@@ -30,9 +25,22 @@ const documentSchema = new mongoose.Schema(
       required: true,
     },
 
-    filePath: {
+    // Cloudinary delivery URL (secure_url)
+    fileUrl: {
       type: String,
       required: true,
+    },
+
+    // Cloudinary public_id used for delete/replace
+    publicId: {
+      type: String,
+      required: true,
+    },
+
+    // MIME type (e.g. application/pdf)
+    fileType: {
+      type: String,
+      default: "",
     },
 
     mimeType: {
@@ -45,6 +53,13 @@ const documentSchema = new mongoose.Schema(
       default: 0,
     },
 
+    // Cloudinary resource_type: image | raw | video
+    resourceType: {
+      type: String,
+      default: "raw",
+    },
+
+    // Student who uploaded
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",
@@ -74,6 +89,7 @@ const documentSchema = new mongoose.Schema(
       default: "",
     },
 
+    // Supervisor who reviewed
     reviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Supervisor",
@@ -84,14 +100,35 @@ const documentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    uploadedAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
+
+// Aliases matching the Cloudinary metadata contract
+documentSchema.virtual("documentType").get(function documentType() {
+  return this.type;
+});
+
+documentSchema.virtual("student").get(function student() {
+  return this.uploadedBy;
+});
+
+documentSchema.virtual("supervisor").get(function supervisor() {
+  return this.reviewedBy;
+});
 
 documentSchema.index({ uploadedBy: 1, createdAt: -1 });
 documentSchema.index({ status: 1, createdAt: -1 });
 documentSchema.index({ group: 1 });
+documentSchema.index({ publicId: 1 });
 
 module.exports = mongoose.model("Document", documentSchema);

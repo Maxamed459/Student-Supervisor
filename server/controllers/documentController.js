@@ -1,5 +1,3 @@
-const fs = require("fs");
-const path = require("path");
 const Document = require("../models/Document");
 const {
   getStudentProfile,
@@ -8,6 +6,12 @@ const {
   studentBelongsToSupervisor,
   getStudentActiveGroup,
 } = require("../utils/accessHelpers");
+const {
+  uploadBufferToCloudinary,
+  deleteFromCloudinary,
+  buildDocumentFolder,
+  resolveResourceType,
+} = require("../utils/cloudinaryStorage");
 
 const populateDocument = (query) =>
   query
@@ -46,10 +50,7 @@ const canAccessDocument = async (req, document) => {
       document.uploadedBy._id?.toString() ||
       document.uploadedBy.toString();
 
-    return studentBelongsToSupervisor(
-      uploaderId,
-      supervisor._id
-    );
+    return studentBelongsToSupervisor(uploaderId, supervisor._id);
   }
 
   return false;
@@ -62,6 +63,69 @@ const allowedTypes = [
   "report",
   "other",
 ];
+
+const mapCloudinaryError = (error) => {
+  const message =
+    error?.message ||
+    error?.error?.message ||
+    "Failed to upload file to Cloudinary";
+
+  if (/Invalid|api_key|api_secret|cloud_name|Must supply/i.test(message)) {
+    return {
+      status: 500,
+      message:
+        "Cloudinary is not configured correctly. Check CLOUDINARY_* environment variables.",
+    };
+  }
+
+  if (/File size too large|maximum/i.test(message)) {
+    return {
+      status: 400,
+      message: "File exceeds Cloudinary size limits",
+    };
+  }
+
+  return { status: 502, message };
+};
+
+const uploadFileToCloudinary = async (file, documentType) => {
+  if (!file?.buffer) {
+    const err = new Error("Document file is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const resourceType = resolveResourceType(file);
+
+  try {
+    return await uploadBufferToCloudinary(file.buffer, {
+      folder: buildDocumentFolder(documentType),
+      resource_type: resourceType,
+      use_filename: true,
+      unique_filename: true,
+      overwrite: false,
+    });
+  } catch (error) {
+    const mapped = mapCloudinaryError(error);
+    const err = new Error(mapped.message);
+    err.statusCode = mapped.status;
+    throw err;
+  }
+};
+
+const removeCloudinaryAsset = async (publicId, resourceType) => {
+  if (!publicId) return;
+
+  try {
+    await deleteFromCloudinary(publicId, resourceType || "raw");
+  } catch (error) {
+    console.error(
+      "Failed to delete Cloudinary asset:",
+      publicId,
+      error.message || error
+    );
+  }
+};
 
 // Student: upload document
 const uploadDocument = async (req, res) => {
@@ -99,20 +163,34 @@ const uploadDocument = async (req, res) => {
       });
     }
 
+    const uploadResult = await uploadFileToCloudinary(req.file, type);
     const group = await getStudentActiveGroup(student._id);
 
-    const document = await Document.create({
-      title: title.trim(),
-      type,
-      fileName: req.file.filename,
-      originalName: req.file.originalname,
-      filePath: req.file.path,
-      mimeType: req.file.mimetype,
-      fileSize: req.file.size,
-      uploadedBy: student._id,
-      group: group?._id || null,
-      status: "pending_review",
-    });
+    let document;
+    try {
+      document = await Document.create({
+        title: title.trim(),
+        type,
+        fileName: req.file.originalname,
+        originalName: req.file.originalname,
+        fileUrl: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        fileType: req.file.mimetype,
+        mimeType: req.file.mimetype,
+        fileSize: req.file.size || uploadResult.bytes || 0,
+        resourceType: uploadResult.resource_type || "raw",
+        uploadedBy: student._id,
+        group: group?._id || null,
+        status: "pending_review",
+        uploadedAt: new Date(),
+      });
+    } catch (dbError) {
+      await removeCloudinaryAsset(
+        uploadResult.public_id,
+        uploadResult.resource_type
+      );
+      throw dbError;
+    }
 
     const populated = await populateDocument(
       Document.findById(document._id)
@@ -126,7 +204,7 @@ const uploadDocument = async (req, res) => {
     });
   } catch (error) {
     console.error("Upload document error:", error);
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || "Failed to upload document",
     });
@@ -161,9 +239,7 @@ const resubmitDocument = async (req, res) => {
       });
     }
 
-    if (
-      !["changes_requested", "rejected"].includes(document.status)
-    ) {
+    if (!["changes_requested", "rejected"].includes(document.status)) {
       return res.status(400).json({
         success: false,
         message:
@@ -186,21 +262,32 @@ const resubmitDocument = async (req, res) => {
       document.type = req.body.type;
     }
 
-    if (fs.existsSync(document.filePath)) {
-      fs.unlinkSync(document.filePath);
-    }
+    const oldPublicId = document.publicId;
+    const oldResourceType = document.resourceType;
 
-    document.fileName = req.file.filename;
+    const uploadResult = await uploadFileToCloudinary(
+      req.file,
+      document.type
+    );
+
+    document.fileName = req.file.originalname;
     document.originalName = req.file.originalname;
-    document.filePath = req.file.path;
+    document.fileUrl = uploadResult.secure_url;
+    document.publicId = uploadResult.public_id;
+    document.fileType = req.file.mimetype;
     document.mimeType = req.file.mimetype;
-    document.fileSize = req.file.size;
+    document.fileSize = req.file.size || uploadResult.bytes || 0;
+    document.resourceType = uploadResult.resource_type || "raw";
     document.status = "pending_review";
     document.feedback = "";
     document.reviewedBy = null;
     document.reviewedAt = null;
+    document.uploadedAt = new Date();
 
     await document.save();
+
+    // Remove previous Cloudinary file after successful replace
+    await removeCloudinaryAsset(oldPublicId, oldResourceType);
 
     const populated = await populateDocument(
       Document.findById(document._id)
@@ -214,7 +301,7 @@ const resubmitDocument = async (req, res) => {
     });
   } catch (error) {
     console.error("Resubmit document error:", error);
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message || "Failed to resubmit document",
     });
@@ -244,9 +331,7 @@ const getDocuments = async (req, res) => {
         });
       }
 
-      const studentIds = await getSupervisorStudentIds(
-        supervisor._id
-      );
+      const studentIds = await getSupervisorStudentIds(supervisor._id);
       filter.uploadedBy = { $in: studentIds };
 
       if (req.query.status) {
@@ -290,9 +375,7 @@ const getDocumentStats = async (req, res) => {
         });
       }
 
-      const studentIds = await getSupervisorStudentIds(
-        supervisor._id
-      );
+      const studentIds = await getSupervisorStudentIds(supervisor._id);
       base = { uploadedBy: { $in: studentIds } };
     }
 
@@ -388,12 +471,10 @@ const downloadDocument = async (req, res) => {
       });
     }
 
-    const absolutePath = path.resolve(document.filePath);
-
-    if (!fs.existsSync(absolutePath)) {
+    if (!document.fileUrl) {
       return res.status(404).json({
         success: false,
-        message: "File not found on server",
+        message: "File URL not found for this document",
       });
     }
 
@@ -402,22 +483,35 @@ const downloadDocument = async (req, res) => {
       req.query.inline === "true" ||
       req.query.view === "1";
 
+    // Proxy Cloudinary content so preview/download still go through auth
+    const cloudResponse = await fetch(document.fileUrl);
+
+    if (!cloudResponse.ok) {
+      return res.status(502).json({
+        success: false,
+        message: "Failed to retrieve file from Cloudinary",
+      });
+    }
+
+    const contentType =
+      document.mimeType ||
+      document.fileType ||
+      cloudResponse.headers.get("content-type") ||
+      "application/octet-stream";
+
     const fileName =
       document.originalName || document.fileName || "document";
 
-    if (inline) {
-      res.setHeader(
-        "Content-Type",
-        document.mimeType || "application/octet-stream"
-      );
-      res.setHeader(
-        "Content-Disposition",
-        `inline; filename="${encodeURIComponent(fileName)}"`
-      );
-      return res.sendFile(absolutePath);
-    }
+    const buffer = Buffer.from(await cloudResponse.arrayBuffer());
 
-    return res.download(absolutePath, fileName);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(fileName)}"`
+    );
+    res.setHeader("Content-Length", buffer.length);
+
+    return res.send(buffer);
   } catch (error) {
     console.error("Download document error:", error);
     return res.status(500).json({
@@ -569,10 +663,7 @@ const deleteDocument = async (req, res) => {
       }
     }
 
-    if (fs.existsSync(document.filePath)) {
-      fs.unlinkSync(document.filePath);
-    }
-
+    await removeCloudinaryAsset(document.publicId, document.resourceType);
     await document.deleteOne();
 
     return res.status(200).json({

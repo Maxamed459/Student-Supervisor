@@ -88,13 +88,30 @@ function DocumentReviewViewer({
         setTextContent("");
         setPreviewUrl("");
 
-        const response = await documentsService.view(doc._id);
-        const blob = new Blob([response.data], {
-          type:
-            doc.mimeType ||
-            response.data.type ||
-            "application/octet-stream",
-        });
+        // Prefer Cloudinary URL for PDF/image; proxy for DOCX/text parsing
+        if ((kind === "pdf" || kind === "image") && doc.fileUrl) {
+          if (!cancelled) setPreviewUrl(doc.fileUrl);
+          return;
+        }
+
+        let blob;
+
+        if (doc.fileUrl && (kind === "docx" || kind === "text")) {
+          const cloudRes = await fetch(doc.fileUrl);
+          if (!cloudRes.ok) {
+            throw new Error("Failed to load file from Cloudinary");
+          }
+          blob = await cloudRes.blob();
+        } else {
+          const response = await documentsService.view(doc._id);
+          blob = new Blob([response.data], {
+            type:
+              doc.mimeType ||
+              doc.fileType ||
+              response.data.type ||
+              "application/octet-stream",
+          });
+        }
 
         if (cancelled) return;
 
@@ -124,6 +141,7 @@ function DocumentReviewViewer({
         if (!cancelled) {
           setPreviewError(
             error.response?.data?.message ||
+              error.message ||
               "Failed to load document preview"
           );
         }
@@ -138,7 +156,7 @@ function DocumentReviewViewer({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [doc?._id, doc?.mimeType, kind]);
+  }, [doc?._id, doc?.mimeType, doc?.fileType, doc?.fileUrl, kind]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -149,7 +167,8 @@ function DocumentReviewViewer({
     downloadDocumentFile(
       documentsService,
       doc._id,
-      doc.originalName
+      doc.originalName || doc.fileName,
+      doc.fileUrl
     );
   };
 

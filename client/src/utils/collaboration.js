@@ -75,7 +75,7 @@ export function statusBadgeClass(status) {
 }
 
 export function getDocumentPreviewKind(doc) {
-  const mime = (doc?.mimeType || "").toLowerCase();
+  const mime = (doc?.mimeType || doc?.fileType || "").toLowerCase();
   const name = (doc?.originalName || doc?.fileName || "").toLowerCase();
 
   if (mime.includes("pdf") || name.endsWith(".pdf")) return "pdf";
@@ -101,8 +101,22 @@ export function getDocumentPreviewKind(doc) {
 export async function downloadDocumentFile(
   apiOrService,
   documentId,
-  fileName
+  fileName,
+  fileUrl
 ) {
+  // Prefer Cloudinary URL when available (no local server file)
+  if (fileUrl) {
+    const link = document.createElement("a");
+    link.href = fileUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.setAttribute("download", fileName || "document");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return;
+  }
+
   const response =
     typeof apiOrService.download === "function"
       ? await apiOrService.download(documentId)

@@ -615,7 +615,8 @@ function StudentDashboard() {
                                         downloadDocumentFile(
                                           documentsService,
                                           doc._id,
-                                          doc.originalName
+                                          doc.originalName || doc.fileName,
+                                          doc.fileUrl
                                         )
                                       }
                                     >
