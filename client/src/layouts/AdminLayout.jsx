@@ -4,12 +4,15 @@ import Logo from "../components/Logo";
 import {
   IconDashboard,
   IconDepartments,
+  IconDocuments,
   IconGroups,
   IconLogout,
+  IconMeetings,
+  IconSettings,
   IconStudents,
   IconSupervisors,
+  IconTasks,
   IconUser,
-  IconCheck,
 } from "../components/Icons";
 
 function AdminLayout() {
@@ -22,16 +25,8 @@ function AdminLayout() {
   };
 
   const navItems = [
-    {
-      label: "Dashboard",
-      path: "/admin",
-      icon: IconDashboard,
-    },
-    {
-      label: "Students",
-      path: "/admin/students",
-      icon: IconStudents,
-    },
+    { label: "Dashboard", path: "/admin", icon: IconDashboard },
+    { label: "Students", path: "/admin/students", icon: IconStudents },
     {
       label: "Supervisors",
       path: "/admin/supervisors",
@@ -42,16 +37,24 @@ function AdminLayout() {
       path: "/admin/departments",
       icon: IconDepartments,
     },
+    { label: "Groups", path: "/admin/groups", icon: IconGroups },
     {
-      label: "Groups",
-      path: "/admin/groups",
-      icon: IconGroups,
-    },
-    {
-      label: "Collaboration",
+      label: "Documents",
       path: "/admin/collaboration",
-      icon: IconCheck,
+      icon: IconDocuments,
+      end: true,
     },
+    {
+      label: "Tasks",
+      path: "/admin/collaboration?tab=tasks",
+      icon: IconTasks,
+    },
+    {
+      label: "Meetings",
+      path: "/admin/collaboration?tab=meetings",
+      icon: IconMeetings,
+    },
+    { label: "Settings", path: "/admin/settings", icon: IconSettings },
   ];
 
   return (
@@ -64,17 +67,38 @@ function AdminLayout() {
         <nav className="sidebar-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const [pathname, query = ""] = item.path.split("?");
 
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
-                end={item.path === "/admin"}
-                className={({ isActive }) =>
-                  isActive
+                end={item.end || item.path === "/admin"}
+                className={({ isActive }) => {
+                  const params = new URLSearchParams(query);
+                  const tab = params.get("tab");
+                  const currentTab =
+                    new URLSearchParams(window.location.search).get(
+                      "tab"
+                    ) || null;
+                  const onCollaboration =
+                    window.location.pathname === "/admin/collaboration";
+
+                  let active = isActive;
+                  if (pathname === "/admin/collaboration") {
+                    if (tab) {
+                      active = onCollaboration && currentTab === tab;
+                    } else {
+                      active =
+                        onCollaboration &&
+                        (!currentTab || currentTab === "documents");
+                    }
+                  }
+
+                  return active
                     ? "sidebar-link active"
-                    : "sidebar-link"
-                }
+                    : "sidebar-link";
+                }}
               >
                 <span className="sidebar-link-icon">
                   <Icon />
@@ -108,8 +132,8 @@ function AdminLayout() {
           <div>
             <h1>Admin Panel</h1>
             <p>
-              Manage students, supervisors, groups, documents, tasks and
-              meetings
+              Full access to students, supervisors, groups, documents,
+              tasks and meetings
             </p>
           </div>
 

@@ -16,17 +16,49 @@ const populateTask = (query) =>
         { path: "department", select: "name code" },
       ],
     })
-    .populate("group", "name code")
+    .populate("group", "name code members")
     .populate({
       path: "assignedBy",
       populate: { path: "user", select: "name email" },
     });
 
+const studentCanAccessTask = async (task, studentId) => {
+  if (!task || !studentId) return false;
+  const studentKey = studentId.toString();
+
+  if (
+    task.assignmentType === "single_student" ||
+    task.assignedTo
+  ) {
+    const assignedId =
+      task.assignedTo?._id?.toString() ||
+      task.assignedTo?.toString() ||
+      "";
+    return assignedId === studentKey;
+  }
+
+  if (task.assignmentType === "all_group") {
+    const groupId =
+      task.group?._id?.toString() || task.group?.toString();
+    if (!groupId) return false;
+
+    const group =
+      task.group?.members
+        ? task.group
+        : await Group.findById(groupId).select("members");
+
+    return (group?.members || []).some(
+      (id) => id.toString() === studentKey
+    );
+  }
+
+  return false;
+};
+
 const createTask = async (req, res) => {
   try {
     let supervisor = await getSupervisorProfile(req.user._id);
 
-    // Admin without a supervisor profile can create on behalf of a supervisor
     if (!supervisor && req.user.role === "admin") {
       const { assignedBy } = req.body;
 
@@ -63,6 +95,7 @@ const createTask = async (req, res) => {
       group,
       priority,
       assignToGroup,
+      assignmentType: assignmentTypeRaw,
     } = req.body;
 
     if (!title?.trim() || !dueDate) {
@@ -90,41 +123,38 @@ const createTask = async (req, res) => {
       });
     }
 
-    let groupId = group || null;
-    let groupRecord = null;
-    let studentIds = [];
+    const wantsAllGroup =
+      assignmentTypeRaw === "all_group" ||
+      assignToGroup === true ||
+      assignToGroup === "true";
 
-    if (groupId) {
-      groupRecord = await Group.findById(groupId);
+    const assignmentType = wantsAllGroup
+      ? "all_group"
+      : "single_student";
 
-      if (
-        !groupRecord ||
-        groupRecord.supervisor?.toString() !==
-          supervisor._id.toString()
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "Invalid group for this supervisor",
-        });
-      }
+    if (!group) {
+      return res.status(400).json({
+        success: false,
+        message: "Group is required",
+      });
     }
 
-    const assignWholeGroup =
-      assignToGroup === true ||
-      assignToGroup === "true" ||
-      (!assignedTo && groupId);
+    const groupRecord = await Group.findById(group);
 
-    if (assignWholeGroup) {
-      if (!groupRecord) {
-        return res.status(400).json({
-          success: false,
-          message: "Group is required when assigning to a whole group",
-        });
-      }
+    if (
+      !groupRecord ||
+      groupRecord.supervisor?.toString() !== supervisor._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Invalid group for this supervisor",
+      });
+    }
 
-      studentIds = groupRecord.members.map((id) => id.toString());
+    let assignedStudentId = null;
 
-      if (!studentIds.length) {
+    if (assignmentType === "all_group") {
+      if (!(groupRecord.members || []).length) {
         return res.status(400).json({
           success: false,
           message: "Selected group has no members",
@@ -134,7 +164,8 @@ const createTask = async (req, res) => {
       if (!assignedTo) {
         return res.status(400).json({
           success: false,
-          message: "Assigned student or group is required",
+          message:
+            "Assigned student is required when assignment type is Single Student",
         });
       }
 
@@ -151,51 +182,45 @@ const createTask = async (req, res) => {
         });
       }
 
-      if (groupRecord) {
-        const isMember = groupRecord.members.some(
-          (id) => id.toString() === assignedTo.toString()
-        );
+      const isMember = (groupRecord.members || []).some(
+        (id) => id.toString() === assignedTo.toString()
+      );
 
-        if (!isMember) {
-          return res.status(400).json({
-            success: false,
-            message: "Student is not a member of the selected group",
-          });
-        }
+      if (!isMember) {
+        return res.status(400).json({
+          success: false,
+          message: "Student is not a member of the selected group",
+        });
       }
 
-      studentIds = [assignedTo.toString()];
+      assignedStudentId = assignedTo;
     }
 
-    const created = await Task.insertMany(
-      studentIds.map((studentId) => ({
-        title: title.trim(),
-        description: description?.trim() || "",
-        dueDate: due,
-        assignedTo: studentId,
-        group: groupId,
-        assignedBy: supervisor._id,
-        priority: taskPriority,
-        status: "pending",
-      }))
-    );
+    // One task record only — never duplicate per group member
+    const created = await Task.create({
+      title: title.trim(),
+      description: description?.trim() || "",
+      dueDate: due,
+      assignedTo: assignedStudentId,
+      group: groupRecord._id,
+      assignmentType,
+      assignedBy: supervisor._id,
+      priority: taskPriority,
+      status: "pending",
+    });
 
-    const populated = await populateTask(
-      Task.find({
-        _id: { $in: created.map((task) => task._id) },
-      }).sort({ createdAt: -1 })
-    );
+    const populated = await populateTask(Task.findById(created._id));
 
     return res.status(201).json({
       success: true,
       message:
-        created.length > 1
-          ? `Task assigned to ${created.length} students`
+        assignmentType === "all_group"
+          ? "Task created for the whole group"
           : "Task created successfully",
-      count: created.length,
+      count: 1,
       data: populated,
-      tasks: populated,
-      task: populated[0],
+      tasks: [populated],
+      task: populated,
     });
   } catch (error) {
     console.error("Create task error:", error);
@@ -218,7 +243,22 @@ const getTasks = async (req, res) => {
           message: "Student profile not found",
         });
       }
-      filter.assignedTo = student._id;
+
+      const memberships = await Group.find({
+        members: student._id,
+      }).select("_id");
+
+      const groupIds = memberships.map((g) => g._id);
+
+      filter = {
+        $or: [
+          { assignedTo: student._id },
+          {
+            assignmentType: "all_group",
+            group: { $in: groupIds },
+          },
+        ],
+      };
     } else if (req.user.role === "supervisor") {
       const supervisor = await getSupervisorProfile(req.user._id);
       if (!supervisor) {
@@ -231,7 +271,9 @@ const getTasks = async (req, res) => {
     }
 
     if (req.query.status) {
-      filter.status = req.query.status;
+      filter = {
+        $and: [filter, { status: req.query.status }],
+      };
     }
 
     const tasks = await populateTask(
@@ -267,13 +309,11 @@ const getTaskById = async (req, res) => {
 
     if (req.user.role === "student") {
       const student = await getStudentProfile(req.user._id);
-      if (
-        !student ||
-        task.assignedTo._id.toString() !== student._id.toString()
-      ) {
+      const allowed = await studentCanAccessTask(task, student?._id);
+      if (!student || !allowed) {
         return res.status(403).json({
           success: false,
-          message: "You can only view your own tasks",
+          message: "You can only view tasks assigned to you or your group",
         });
       }
     }
@@ -339,6 +379,7 @@ const updateTask = async (req, res) => {
         status,
         assignedTo,
         group,
+        assignmentType,
       } = req.body;
 
       if (assignedTo && req.user.role === "supervisor") {
@@ -356,7 +397,9 @@ const updateTask = async (req, res) => {
         }
       }
 
-      if (assignedTo) task.assignedTo = assignedTo;
+      if (assignedTo !== undefined) {
+        task.assignedTo = assignedTo || null;
+      }
       if (title !== undefined) task.title = title.trim();
       if (description !== undefined) {
         task.description = description.trim();
@@ -365,22 +408,36 @@ const updateTask = async (req, res) => {
       if (priority !== undefined) task.priority = priority;
       if (status !== undefined) task.status = status;
       if (group !== undefined) task.group = group || null;
+      if (
+        assignmentType === "all_group" ||
+        assignmentType === "single_student"
+      ) {
+        task.assignmentType = assignmentType;
+        if (assignmentType === "all_group") {
+          task.assignedTo = null;
+        }
+      }
     } else if (req.user.role === "student") {
       const student = await getStudentProfile(req.user._id);
-      if (
-        !student ||
-        task.assignedTo.toString() !== student._id.toString()
-      ) {
+      const populatedForAccess = await populateTask(
+        Task.findById(task._id)
+      );
+      const allowed = await studentCanAccessTask(
+        populatedForAccess,
+        student?._id
+      );
+
+      if (!student || !allowed) {
         return res.status(403).json({
           success: false,
-          message: "You can only update your own tasks",
+          message: "You can only update tasks assigned to you or your group",
         });
       }
 
       const { status, submissionNote } = req.body;
-      const allowed = ["pending", "in_progress", "completed"];
+      const allowedStatuses = ["pending", "in_progress", "completed"];
 
-      if (status && !allowed.includes(status)) {
+      if (status && !allowedStatuses.includes(status)) {
         return res.status(400).json({
           success: false,
           message: "Invalid task status",

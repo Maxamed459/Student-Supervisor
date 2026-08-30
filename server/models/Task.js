@@ -19,16 +19,24 @@ const taskSchema = new mongoose.Schema(
       required: true,
     },
 
+    // Required only when assignmentType is single_student
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",
-      required: true,
+      default: null,
     },
 
+    // Required for both all_group and single_student assignments
     group: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Group",
       default: null,
+    },
+
+    assignmentType: {
+      type: String,
+      enum: ["all_group", "single_student"],
+      default: "single_student",
     },
 
     assignedBy: {
@@ -67,5 +75,6 @@ const taskSchema = new mongoose.Schema(
 
 taskSchema.index({ assignedTo: 1, dueDate: 1 });
 taskSchema.index({ assignedBy: 1, status: 1 });
+taskSchema.index({ group: 1, assignmentType: 1 });
 
 module.exports = mongoose.model("Task", taskSchema);

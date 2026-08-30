@@ -12,7 +12,12 @@ function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  // Admin can open every role-gated screen
+  if (
+    allowedRoles &&
+    user?.role !== "admin" &&
+    !allowedRoles.includes(user.role)
+  ) {
     return <Navigate to="/unauthorized" replace />;
   }
 

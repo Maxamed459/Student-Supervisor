@@ -1,36 +1,36 @@
 const Department = require("../models/Department");
 const Student = require("../models/Student");
 const Supervisor = require("../models/Supervisor");
+const { generateDepartmentCode } = require("../utils/idGenerator");
 
 // CREATE DEPARTMENT
 const createDepartment = async (req, res) => {
   try {
-    const { name, code, description } = req.body;
+    const { name, description } = req.body;
 
-    if (!name || !code) {
+    if (!name) {
       return res.status(400).json({
         success: false,
-        message: "Department name and code are required",
+        message: "Department name is required",
       });
     }
 
     const existingDepartment = await Department.findOne({
-      $or: [
-        { name: name.trim() },
-        { code: code.trim().toUpperCase() },
-      ],
+      name: name.trim(),
     });
 
     if (existingDepartment) {
       return res.status(400).json({
         success: false,
-        message: "Department name or code already exists",
+        message: "Department name already exists",
       });
     }
 
+    const code = await generateDepartmentCode();
+
     const department = await Department.create({
       name: name.trim(),
-      code: code.trim().toUpperCase(),
+      code,
       description: description?.trim(),
     });
 
@@ -105,7 +105,7 @@ const getDepartmentById = async (req, res) => {
 // UPDATE DEPARTMENT
 const updateDepartment = async (req, res) => {
   try {
-    const { name, code, description, isActive } = req.body;
+    const { name, description, isActive } = req.body;
 
     const department = await Department.findById(req.params.id);
 
@@ -120,9 +120,7 @@ const updateDepartment = async (req, res) => {
       department.name = name.trim();
     }
 
-    if (code) {
-      department.code = code.trim().toUpperCase();
-    }
+    // department code is system-generated and not editable
 
     if (description !== undefined) {
       department.description = description.trim();

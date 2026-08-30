@@ -22,6 +22,7 @@ import Supervisors from "./pages/Supervisors";
 import Departments from "./pages/Departments";
 import Groups from "./pages/Groups";
 import AdminCollaboration from "./pages/AdminCollaboration";
+import AdminSettings from "./pages/AdminSettings";
 
 // Role Dashboards
 import SupervisorDashboard from "./pages/SupervisorDashboard";
@@ -96,6 +97,8 @@ function App() {
               path="collaboration"
               element={<AdminCollaboration />}
             />
+
+            <Route path="settings" element={<AdminSettings />} />
           </Route>
 
           {/* =====================================

@@ -5,6 +5,7 @@ const Department = require("../models/Department");
 const {
   getSupervisorMemberIds,
 } = require("../utils/supervisorCapacity");
+const { generateGroupCode } = require("../utils/idGenerator");
 
 const populateGroup = (query) =>
   query
@@ -310,7 +311,6 @@ const createGroup = async (req, res) => {
   try {
     const {
       name,
-      code,
       department,
       supervisor,
       projectTitle,
@@ -319,10 +319,10 @@ const createGroup = async (req, res) => {
       memberIds,
     } = req.body;
 
-    if (!name || !code || !department) {
+    if (!name || !department) {
       return res.status(400).json({
         success: false,
-        message: "Name, code and department are required",
+        message: "Name and department are required",
       });
     }
 
@@ -337,16 +337,7 @@ const createGroup = async (req, res) => {
       });
     }
 
-    const existingCode = await Group.findOne({
-      code: code.trim().toUpperCase(),
-    });
-
-    if (existingCode) {
-      return res.status(409).json({
-        success: false,
-        message: "Group code already exists",
-      });
-    }
+    const code = await generateGroupCode();
 
     let supervisorId = null;
 
@@ -359,17 +350,6 @@ const createGroup = async (req, res) => {
         return res.status(404).json({
           success: false,
           message: "Supervisor not found",
-        });
-      }
-
-      if (
-        supervisorRecord.department.toString() !==
-        department.toString()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Supervisor must belong to the same department as the group",
         });
       }
 
@@ -401,17 +381,6 @@ const createGroup = async (req, res) => {
         });
       }
 
-      if (
-        student.department.toString() !==
-        department.toString()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "All students must belong to the same department as the group",
-        });
-      }
-
       const existingActiveGroup =
         await findActiveGroupForStudent(studentId);
 
@@ -439,7 +408,7 @@ const createGroup = async (req, res) => {
 
     const group = await Group.create({
       name: name.trim(),
-      code: code.trim().toUpperCase(),
+      code,
       department,
       supervisor: supervisorId,
       members: uniqueMemberIds,
@@ -492,28 +461,13 @@ const updateGroup = async (req, res) => {
 
     const {
       name,
-      code,
       department,
       projectTitle,
       description,
       status,
     } = req.body;
 
-    if (code) {
-      const existingCode = await Group.findOne({
-        code: code.trim().toUpperCase(),
-        _id: { $ne: group._id },
-      });
-
-      if (existingCode) {
-        return res.status(409).json({
-          success: false,
-          message: "Group code already exists",
-        });
-      }
-
-      group.code = code.trim().toUpperCase();
-    }
+    // group code is system-generated and not editable
 
     if (name !== undefined) {
       group.name = name.trim();
@@ -529,27 +483,6 @@ const updateGroup = async (req, res) => {
           success: false,
           message: "Department not found",
         });
-      }
-
-      if (
-        group.supervisor &&
-        group.members.length > 0
-      ) {
-        const supervisor = await Supervisor.findById(
-          group.supervisor
-        );
-
-        if (
-          supervisor &&
-          supervisor.department.toString() !==
-            department.toString()
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Cannot change department while supervisor belongs to another department",
-          });
-        }
       }
 
       group.department = department;
@@ -647,17 +580,6 @@ const assignSupervisor = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Supervisor not found",
-      });
-    }
-
-    if (
-      supervisorRecord.department.toString() !==
-      group.department.toString()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Supervisor must belong to the same department as the group",
       });
     }
 
@@ -793,16 +715,6 @@ const addMembers = async (req, res) => {
         return res.status(404).json({
           success: false,
           message: `Student not found: ${studentId}`,
-        });
-      }
-
-      if (
-        student.department.toString() !==
-        group.department.toString()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: `${student.studentId} must belong to the same department as the group`,
         });
       }
 

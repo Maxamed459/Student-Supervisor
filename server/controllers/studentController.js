@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const Student = require("../models/Student");
 const User = require("../models/User");
 const Department = require("../models/Department");
+const { generateStudentId } = require("../utils/idGenerator");
 
 // =====================================================
 // GET ALL STUDENTS
@@ -136,7 +137,6 @@ const createStudent = async (
       name,
       email,
       password,
-      studentId,
       department,
       phone,
       level,
@@ -151,13 +151,12 @@ const createStudent = async (
       !name ||
       !email ||
       !password ||
-      !studentId ||
       !department
     ) {
       return res.status(400).json({
         success: false,
         message:
-          "Name, email, password, student ID and department are required",
+          "Name, email, password and department are required",
       });
     }
 
@@ -181,24 +180,6 @@ const createStudent = async (
     }
 
     // -------------------------------------------------
-    // CHECK EXISTING STUDENT ID
-    // -------------------------------------------------
-
-    const existingStudent =
-      await Student.findOne({
-        studentId:
-          studentId.trim(),
-      });
-
-    if (existingStudent) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Student ID already exists",
-      });
-    }
-
-    // -------------------------------------------------
     // CHECK DEPARTMENT EXISTS
     // -------------------------------------------------
 
@@ -214,6 +195,8 @@ const createStudent = async (
           "Department not found",
       });
     }
+
+    const studentId = await generateStudentId();
 
     // -------------------------------------------------
     // CREATE USER (hashed password)
@@ -239,8 +222,7 @@ const createStudent = async (
     const student =
       await Student.create({
         user: user._id,
-        studentId:
-          studentId.trim(),
+        studentId,
         department,
         supervisor: null,
         phone:
@@ -324,38 +306,13 @@ const updateStudent = async (
     const {
       name,
       email,
-      studentId,
       department,
       phone,
       level,
       academicYear,
     } = req.body;
 
-    // -------------------------------------------------
-    // CHECK STUDENT ID
-    // -------------------------------------------------
-
-    if (studentId) {
-      const existingStudent =
-        await Student.findOne({
-          studentId:
-            studentId.trim(),
-          _id: {
-            $ne: student._id,
-          },
-        });
-
-      if (existingStudent) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Student ID already exists",
-        });
-      }
-
-      student.studentId =
-        studentId.trim();
-    }
+    // studentId is system-generated and not editable
 
     // -------------------------------------------------
     // UPDATE STUDENT FIELDS

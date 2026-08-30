@@ -47,11 +47,16 @@ const protect = async (req, res, next) => {
 };
 
 // ROLE AUTHORIZATION
+// Admin can access every protected role route.
 const authorize = (...roles) => {
   return (req, res, next) => {
     const userRole = String(req.user?.role || "")
       .trim()
       .toLowerCase();
+
+    if (userRole === "admin") {
+      return next();
+    }
 
     if (!roles.map((role) => String(role).toLowerCase()).includes(userRole)) {
       return res.status(403).json({

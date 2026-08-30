@@ -88,20 +88,40 @@ function DocumentReviewViewer({
         setTextContent("");
         setPreviewUrl("");
 
-        // Prefer Cloudinary URL for PDF/image; proxy for DOCX/text parsing
-        if ((kind === "pdf" || kind === "image") && doc.fileUrl) {
-          if (!cancelled) setPreviewUrl(doc.fileUrl);
+        // Always proxy through the API with inline disposition so Cloudinary
+        // "raw" PDFs/images are not forced as attachments in the iframe.
+        if (kind === "pdf" || kind === "image") {
+          const response = await documentsService.view(doc._id);
+          const mime =
+            doc.mimeType ||
+            doc.fileType ||
+            response.data?.type ||
+            (kind === "pdf" ? "application/pdf" : "image/*");
+          const blob = new Blob([response.data], { type: mime });
+          objectUrl = URL.createObjectURL(blob);
+          if (!cancelled) setPreviewUrl(objectUrl);
           return;
         }
 
         let blob;
 
         if (doc.fileUrl && (kind === "docx" || kind === "text")) {
-          const cloudRes = await fetch(doc.fileUrl);
-          if (!cloudRes.ok) {
-            throw new Error("Failed to load file from Cloudinary");
+          try {
+            const cloudRes = await fetch(doc.fileUrl);
+            if (!cloudRes.ok) {
+              throw new Error("Failed to load file from Cloudinary");
+            }
+            blob = await cloudRes.blob();
+          } catch {
+            const response = await documentsService.view(doc._id);
+            blob = new Blob([response.data], {
+              type:
+                doc.mimeType ||
+                doc.fileType ||
+                response.data.type ||
+                "application/octet-stream",
+            });
           }
-          blob = await cloudRes.blob();
         } else {
           const response = await documentsService.view(doc._id);
           blob = new Blob([response.data], {
@@ -115,10 +135,7 @@ function DocumentReviewViewer({
 
         if (cancelled) return;
 
-        if (kind === "pdf" || kind === "image") {
-          objectUrl = URL.createObjectURL(blob);
-          setPreviewUrl(objectUrl);
-        } else if (kind === "docx") {
+        if (kind === "docx") {
           const arrayBuffer = await blob.arrayBuffer();
           const result = await mammoth.convertToHtml({ arrayBuffer });
           if (!cancelled) {

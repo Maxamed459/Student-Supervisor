@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import Logo from "../components/Logo";
 import {
+  IconBook,
   IconDashboard,
   IconGroups,
   IconLogout,
+  IconSettings,
+  IconStudents,
   IconUser,
 } from "../components/Icons";
 import documentsService from "../services/documentsService";
@@ -13,14 +15,162 @@ import tasksService from "../services/tasksService";
 import meetingsService from "../services/meetingsService";
 import api from "../services/api";
 import DocumentReviewViewer from "../components/DocumentReviewViewer";
+import Logo from "../components/Logo";
+import { THESIS_GUIDELINES } from "../data/thesisGuidelines";
 import {
   documentStatusLabel,
   documentTypeLabel,
   formatDate,
+  formatDateTime,
   meetingStatusLabel,
   statusBadgeClass,
+  taskAssignmentTypeLabel,
+  getTaskAssignmentType,
   taskStatusLabel,
 } from "../utils/collaboration";
+
+const AVATAR_COLORS = [
+  "#2563EB",
+  "#7C3AED",
+  "#059669",
+  "#D97706",
+  "#DB2777",
+  "#0891B2",
+];
+
+function initials(name = "") {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+function avatarColor(seed = "") {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function relativeLabel(dateValue) {
+  if (!dateValue) return "";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const startToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  );
+  const startTarget = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate()
+  );
+  const dayDiff = Math.round(
+    (startTarget - startToday) / (1000 * 60 * 60 * 24)
+  );
+
+  if (dayDiff === 0) return "Today";
+  if (dayDiff === 1) return "Tomorrow";
+  if (dayDiff > 1 && dayDiff <= 7) return `In ${dayDiff} Days`;
+  if (dayDiff === -1) return "Yesterday";
+  if (dayDiff < -1) return formatDate(dateValue);
+  return formatDate(dateValue);
+}
+
+function relativeAgo(dateValue) {
+  if (!dateValue) return "";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return formatDateTime(dateValue);
+}
+
+function IconBell({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22zm6.4-6.2V11a6.4 6.4 0 0 0-5.1-6.3V4a1.3 1.3 0 1 0-2.6 0v.7A6.4 6.4 0 0 0 5.6 11v4.8L4 17.4v.8h16v-.8l-1.6-1.6z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconSearch({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconAlert({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconCheckCircle({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-2 14.5-4-4 1.4-1.4L10 13.7l6.6-6.6L18 8.5l-8 8z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconDocPlus({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zm-3-7V3.5L18.5 9H13z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconCalendar({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function IconTasks({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14-4-4 1.4-1.4L10 14.2l5.6-5.6L17 10l-7 7z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 const EMPTY_TASK = {
   title: "",
@@ -29,7 +179,7 @@ const EMPTY_TASK = {
   assignedTo: "",
   group: "",
   priority: "medium",
-  assignToGroup: false,
+  assignmentType: "single_student",
 };
 
 const EMPTY_MEETING = {
@@ -71,6 +221,8 @@ function SupervisorDashboard() {
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [meetingForm, setMeetingForm] = useState(EMPTY_MEETING);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [progressGroupFilter, setProgressGroupFilter] = useState("all");
 
   const loadAll = async () => {
     try {
@@ -154,11 +306,242 @@ function SupervisorDashboard() {
   const approvedDocs = documents.filter(
     (doc) => doc.status === "approved"
   );
+  const changesRequestedDocs = documents.filter(
+    (doc) => doc.status === "changes_requested"
+  );
   const upcomingMeetings = meetings.filter(
     (meeting) =>
       meeting.status === "scheduled" &&
       new Date(meeting.date) >= new Date(new Date().toDateString())
   );
+
+  const activeGroups = groups.filter(
+    (group) => (group.status || "active") === "active"
+  );
+
+  const query = searchQuery.trim().toLowerCase();
+
+  const filteredPendingDocs = useMemo(() => {
+    if (!query) return pendingDocs;
+    return pendingDocs.filter((doc) => {
+      const hay = [
+        doc.title,
+        doc.type,
+        doc.originalName,
+        doc.uploadedBy?.user?.name,
+        doc.group?.name,
+        doc.group?.code,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(query);
+    });
+  }, [pendingDocs, query]);
+
+  const filteredDocuments = useMemo(() => {
+    if (!query) return documents;
+    return documents.filter((doc) => {
+      const hay = [
+        doc.title,
+        doc.type,
+        doc.originalName,
+        doc.uploadedBy?.user?.name,
+        doc.group?.name,
+        doc.feedback,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(query);
+    });
+  }, [documents, query]);
+
+  const filteredStudents = useMemo(() => {
+    if (!query) return groupMembers;
+    return groupMembers.filter((student) => {
+      const hay = [
+        student.user?.name,
+        student.user?.email,
+        student.studentId,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(query);
+    });
+  }, [groupMembers, query]);
+
+  const studentProgress = useMemo(() => {
+    return groupMembers
+      .filter((student) => {
+        if (progressGroupFilter === "all") return true;
+        const group = groups.find((g) => g._id === progressGroupFilter);
+        return (group?.members || []).some(
+          (m) => (m._id || m) === student._id
+        );
+      })
+      .map((student) => {
+        const studentDocs = documents.filter((doc) => {
+          const uploader =
+            doc.uploadedBy?._id?.toString() ||
+            doc.uploadedBy?.toString();
+          return uploader === student._id?.toString();
+        });
+        const studentTasks = tasks.filter((task) => {
+          const type = getTaskAssignmentType(task);
+          if (type === "all_group") {
+            const taskGroupId =
+              task.group?._id?.toString() || task.group?.toString();
+            if (!taskGroupId) return false;
+            const group = groups.find(
+              (g) => g._id?.toString() === taskGroupId
+            );
+            return (group?.members || []).some(
+              (m) => (m._id || m)?.toString() === student._id?.toString()
+            );
+          }
+          const assignee =
+            task.assignedTo?._id?.toString() ||
+            task.assignedTo?.toString();
+          return assignee === student._id?.toString();
+        });
+
+        const approvedCount = studentDocs.filter(
+          (d) => d.status === "approved"
+        ).length;
+        const completedTasks = studentTasks.filter(
+          (t) => t.status === "completed"
+        ).length;
+        const totalUnits = studentDocs.length + studentTasks.length;
+        const doneUnits = approvedCount + completedTasks;
+        const pct =
+          totalUnits === 0
+            ? 0
+            : Math.round((doneUnits / totalUnits) * 100);
+
+        const group =
+          groups.find((g) =>
+            (g.members || []).some((m) => (m._id || m) === student._id)
+          ) || null;
+
+        const pendingForStudent = studentDocs.some(
+          (d) => d.status === "pending_review"
+        );
+        const overdueTask = studentTasks.some(
+          (t) =>
+            t.status !== "completed" &&
+            t.dueDate &&
+            new Date(t.dueDate) < new Date(new Date().toDateString())
+        );
+
+        let track = "On Track";
+        let trackTone = "good";
+        if (totalUnits === 0) {
+          track = "Getting Started";
+          trackTone = "neutral";
+        } else if (overdueTask || (pct < 40 && pendingForStudent)) {
+          track = "Behind Schedule";
+          trackTone = "bad";
+        } else if (pct < 70) {
+          track = "In Progress";
+          trackTone = "neutral";
+        }
+
+        return {
+          id: student._id,
+          name: student.user?.name || "N/A",
+          groupName: group?.name || "No group",
+          projectTitle: group?.projectTitle || group?.name || "Project",
+          pct,
+          track,
+          trackTone,
+          student,
+          group,
+        };
+      });
+  }, [groupMembers, groups, documents, tasks, progressGroupFilter]);
+
+  const upcomingMilestones = useMemo(() => {
+    const fromMeetings = upcomingMeetings.map((m) => ({
+      id: `meeting-${m._id}`,
+      title: m.title,
+      meta: m.group?.name || "Meeting",
+      when: relativeLabel(m.date),
+      tone:
+        relativeLabel(m.date) === "Tomorrow" ||
+        relativeLabel(m.date) === "Today"
+          ? "urgent"
+          : relativeLabel(m.date).startsWith("In")
+            ? "info"
+            : "muted",
+      sortDate: new Date(m.date).getTime(),
+    }));
+
+    const fromTasks = tasks
+      .filter(
+        (t) =>
+          t.status !== "completed" &&
+          t.dueDate &&
+          new Date(t.dueDate) >= new Date(new Date().toDateString())
+      )
+      .map((t) => ({
+        id: `task-${t._id}`,
+        title: t.title,
+        meta:
+          getTaskAssignmentType(t) === "all_group"
+            ? t.group?.name
+              ? `Group · ${t.group.name}`
+              : "All Group"
+            : t.assignedTo?.user?.name || "Task",
+        when: relativeLabel(t.dueDate),
+        tone:
+          relativeLabel(t.dueDate) === "Tomorrow" ||
+          relativeLabel(t.dueDate) === "Today"
+            ? "urgent"
+            : "info",
+        sortDate: new Date(t.dueDate).getTime(),
+      }));
+
+    return [...fromMeetings, ...fromTasks]
+      .sort((a, b) => a.sortDate - b.sortDate)
+      .slice(0, 5);
+  }, [upcomingMeetings, tasks]);
+
+  const recentActivity = useMemo(() => {
+    const events = documents.map((doc) => {
+      const studentName = doc.uploadedBy?.user?.name || "Student";
+      const when = doc.reviewedAt || doc.updatedAt || doc.createdAt;
+      let text = `${studentName} submitted ${doc.title}`;
+      let tone = "info";
+
+      if (doc.status === "approved") {
+        text = `You approved ${doc.title} for ${studentName}`;
+        tone = "good";
+      } else if (doc.status === "changes_requested") {
+        text = `Changes requested on ${doc.title} for ${studentName}`;
+        tone = "muted";
+      } else if (doc.status === "rejected") {
+        text = `You rejected ${doc.title} for ${studentName}`;
+        tone = "bad";
+      } else if (doc.status === "pending_review") {
+        text = `${studentName} submitted ${doc.title}`;
+        tone = "info";
+      }
+
+      return {
+        id: doc._id,
+        text,
+        when: relativeAgo(when),
+        tone,
+        sortDate: new Date(when).getTime(),
+      };
+    });
+
+    return events
+      .sort((a, b) => b.sortDate - a.sortDate)
+      .slice(0, 6);
+  }, [documents]);
 
   const studentsForGroup = (groupId) => {
     if (!groupId) return groupMembers;
@@ -212,7 +595,7 @@ function SupervisorDashboard() {
             assignedTo: task.assignedTo?._id || "",
             group: task.group?._id || "",
             priority: task.priority || "medium",
-            assignToGroup: false,
+            assignmentType: getTaskAssignmentType(task),
           }
         : EMPTY_TASK
     );
@@ -223,23 +606,49 @@ function SupervisorDashboard() {
   const saveTask = async (e) => {
     e.preventDefault();
 
+    if (!taskForm.group) {
+      setMessage({
+        type: "error",
+        text: "Please select a group",
+      });
+      return;
+    }
+
+    if (
+      taskForm.assignmentType === "single_student" &&
+      !taskForm.assignedTo
+    ) {
+      setMessage({
+        type: "error",
+        text: "Please select a student for Single Student assignment",
+      });
+      return;
+    }
+
     try {
       setSaving(true);
+      const isAllGroup = taskForm.assignmentType === "all_group";
       const payload = {
         title: taskForm.title,
         description: taskForm.description,
         dueDate: taskForm.dueDate,
         priority: taskForm.priority,
-        group: taskForm.group || undefined,
-        assignedTo: taskForm.assignToGroup
+        group: taskForm.group,
+        assignmentType: taskForm.assignmentType,
+        assignToGroup: isAllGroup,
+        assignedTo: isAllGroup
           ? undefined
           : taskForm.assignedTo || undefined,
-        assignToGroup: Boolean(taskForm.assignToGroup),
       };
 
       if (editingTask) {
         await tasksService.update(editingTask._id, {
-          ...payload,
+          title: payload.title,
+          description: payload.description,
+          dueDate: payload.dueDate,
+          priority: payload.priority,
+          group: payload.group,
+          assignmentType: "single_student",
           assignedTo: taskForm.assignedTo,
           status: editingTask.status,
         });
@@ -350,20 +759,28 @@ function SupervisorDashboard() {
   };
 
   const navItems = [
-    { id: "overview", label: "Overview", icon: IconDashboard },
-    { id: "documents", label: "Documents", icon: IconGroups },
-    { id: "tasks", label: "Tasks", icon: IconGroups },
-    { id: "meetings", label: "Meetings", icon: IconGroups },
+    { id: "overview", label: "Dashboard", icon: IconDashboard },
+    { id: "students", label: "My Students", icon: IconStudents },
+    { id: "groups", label: "My Groups", icon: IconGroups },
+    { id: "documents", label: "Submissions", icon: IconDocPlus },
+    { id: "tasks", label: "Tasks", icon: IconTasks },
+    { id: "meetings", label: "Meetings", icon: IconCalendar },
+    { id: "guidelines", label: "Guidelines", icon: IconBook },
+    { id: "profile", label: "Profile", icon: IconUser },
+    { id: "settings", label: "Settings", icon: IconSettings },
   ];
 
+  const specialization =
+    supervisor?.specialization || "Senior Supervisor";
+
   return (
-    <div className="role-layout">
-      <aside className="admin-sidebar role-sidebar">
-        <div className="sidebar-logo">
+    <div className="sos-layout">
+      <aside className="sos-sidebar">
+        <div className="sos-brand">
           <Logo light />
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sos-nav">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
@@ -372,55 +789,74 @@ function SupervisorDashboard() {
                 type="button"
                 className={
                   tab === item.id
-                    ? "sidebar-link active"
-                    : "sidebar-link"
+                    ? "sos-nav-link active"
+                    : "sos-nav-link"
                 }
                 onClick={() => setTab(item.id)}
               >
-                <span className="sidebar-link-icon">
-                  <Icon />
-                </span>
+                <Icon size={18} />
                 <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="admin-info">
-            <div className="user-avatar" aria-hidden="true">
-              {user?.name?.charAt(0)?.toUpperCase() || "S"}
-            </div>
-            <div>
-              <strong>{user?.name}</strong>
-              <span>Supervisor</span>
-            </div>
-          </div>
-          <button className="logout-btn" onClick={handleLogout}>
-            <IconLogout size={16} />
+        <div className="sos-sidebar-bottom">
+          <button
+            type="button"
+            className="sos-nav-link sos-logout"
+            onClick={handleLogout}
+          >
+            <IconLogout size={18} />
             <span>Logout</span>
           </button>
         </div>
       </aside>
 
-      <main className="admin-main role-main">
-        <header className="admin-header">
-          <div>
-            <h1>Supervisor Dashboard</h1>
-            <p>
-              Groups, document reviews, tasks and meetings
-            </p>
+      <div className="sos-main">
+        <header className="sos-topbar">
+          <div className="sos-search">
+            <IconSearch size={16} />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search students or documents..."
+              aria-label="Search students or documents"
+            />
           </div>
-          <div className="header-user">
-            <IconUser size={16} />
-            <span>{user?.name}</span>
+
+          <div className="sos-topbar-right">
+            <button
+              type="button"
+              className="sos-bell"
+              aria-label="Notifications"
+              onClick={() => setTab("documents")}
+            >
+              <IconBell size={18} />
+              {pendingDocs.length > 0 && <span className="sos-bell-dot" />}
+            </button>
+
+            <div className="sos-user-chip">
+              <div className="sos-user-text">
+                <strong>{user?.name || "Supervisor"}</strong>
+                <span>{specialization}</span>
+              </div>
+              <div
+                className="sos-user-avatar"
+                style={{
+                  background: avatarColor(user?.name || "S"),
+                }}
+                aria-hidden="true"
+              >
+                {initials(user?.name || "S")}
+              </div>
+            </div>
           </div>
         </header>
 
-        <section className="admin-content">
-          {error && (
-            <div className="alert alert-error">{error}</div>
-          )}
+        <section className="sos-content">
+          {error && <div className="alert alert-error">{error}</div>}
 
           {message.text && (
             <div
@@ -440,343 +876,648 @@ function SupervisorDashboard() {
             <>
               {tab === "overview" && (
                 <>
-                  <div className="stats-grid">
-                    <div className="stat-card">
-                      <div className="stat-card-content">
+                  <div className="sos-page-head">
+                    <div>
+                      <h1>Supervisor Dashboard</h1>
+                      <p>
+                        Monitor assigned students, milestones,
+                        submissions, and review activity.
+                      </p>
+                    </div>
+                    <div className="sos-session-pill">
+                      <span className="sos-session-dot" />
+                      STATUS: Active Session
+                    </div>
+                  </div>
+
+                  <div className="sos-stats">
+                    <div className="sos-stat">
+                      <div className="sos-stat-icon">
+                        <IconStudents size={18} />
+                      </div>
+                      <div>
+                        <span>My Students</span>
+                        <strong>{memberCount}</strong>
+                        <small>Total assigned</small>
+                      </div>
+                    </div>
+                    <div className="sos-stat">
+                      <div className="sos-stat-icon blue">
+                        <IconGroups size={18} />
+                      </div>
+                      <div>
+                        <span>Active Groups</span>
+                        <strong>{activeGroups.length}</strong>
+                        <small>Active rooms</small>
+                      </div>
+                    </div>
+                    <div className="sos-stat urgent">
+                      <div className="sos-stat-icon red">
+                        <IconAlert size={18} />
+                      </div>
+                      <div>
                         <span>Pending Reviews</span>
                         <strong>
-                          {docStats?.pendingReviews || 0}
+                          {docStats?.pendingReviews ||
+                            pendingDocs.length}
                         </strong>
+                        <small>Waiting for review</small>
                       </div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-card-content">
-                        <span>Approved Documents</span>
-                        <strong>{docStats?.approved || 0}</strong>
+                    <div className="sos-stat">
+                      <div className="sos-stat-icon green">
+                        <IconCheckCircle size={18} />
+                      </div>
+                      <div>
+                        <span>Approved</span>
+                        <strong>
+                          {docStats?.approved || approvedDocs.length}
+                        </strong>
+                        <small>Total approved</small>
                       </div>
                     </div>
-                    <div className="stat-card">
-                      <div className="stat-card-content">
-                        <span>Rejected Documents</span>
-                        <strong>{docStats?.rejected || 0}</strong>
+                    <div className="sos-stat">
+                      <div className="sos-stat-icon">
+                        <IconDocPlus size={18} />
                       </div>
-                    </div>
-                    <div className="stat-card">
-                      <div className="stat-card-content">
-                        <span>Group Members</span>
-                        <strong>{memberCount}</strong>
+                      <div>
+                        <span>Changes Req.</span>
+                        <strong>
+                          {docStats?.changesRequested ||
+                            changesRequestedDocs.length}
+                        </strong>
+                        <small>Total revisions</small>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="dashboard-section">
-                    <h3>Capacity</h3>
-                    <div className="capacity-preview large">
-                      <div className="capacity-text">
-                        <strong>{memberCount}</strong>
-                        <span> / {maxStudents}</span>
-                      </div>
-                      <div className="capacity-bar">
-                        <div
-                          className="capacity-fill"
-                          style={{
-                            width: `${Math.min(percentage, 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <small>
-                        Unique students across your groups · Available
-                        slots: {availableSlots}
-                      </small>
                     </div>
                   </div>
 
-                  <div className="dashboard-panels">
-                    <div className="dashboard-section">
-                      <div className="section-header">
-                        <h3>Pending Reviews</h3>
-                        <button
-                          type="button"
-                          className="section-link"
-                          onClick={() => setTab("documents")}
-                        >
-                          View all
-                        </button>
-                      </div>
-                      <div className="table-card">
-                        {pendingDocs.length === 0 ? (
+                  <div className="sos-grid">
+                    <div className="sos-col-main">
+                      <div className="sos-card">
+                        <div className="sos-card-head">
+                          <div className="sos-card-title">
+                            <span className="sos-priority-icon">
+                              <IconAlert size={16} />
+                            </span>
+                            <h3>
+                              Pending Reviews ({pendingDocs.length})
+                            </h3>
+                          </div>
+                          <button
+                            type="button"
+                            className="sos-link"
+                            onClick={() => setTab("documents")}
+                          >
+                            View All →
+                          </button>
+                        </div>
+
+                        {filteredPendingDocs.length === 0 ? (
                           <div className="empty-state">
                             <p>No documents waiting for review.</p>
                           </div>
                         ) : (
                           <div className="table-wrapper">
-                            <table>
+                            <table className="sos-table">
                               <thead>
                                 <tr>
-                                  <th>Document</th>
-                                  <th>Group</th>
                                   <th>Student</th>
-                                  <th>Upload Date</th>
+                                  <th>Milestone / Version</th>
+                                  <th>Date Submitted</th>
                                   <th>Status</th>
-                                  <th></th>
+                                  <th />
                                 </tr>
                               </thead>
                               <tbody>
-                                {pendingDocs
-                                  .slice(0, 5)
-                                  .map((doc) => (
-                                    <tr key={doc._id}>
-                                      <td>
-                                        <strong>{doc.title}</strong>
-                                        <div className="text-muted">
-                                          {documentTypeLabel[
-                                            doc.type
-                                          ] || doc.type}
-                                        </div>
-                                      </td>
-                                      <td>
-                                        {doc.group?.name || "N/A"}
-                                        {doc.group?.code
-                                          ? ` (${doc.group.code})`
-                                          : ""}
-                                      </td>
-                                      <td>
-                                        {doc.uploadedBy?.user
-                                          ?.name || "N/A"}
-                                      </td>
-                                      <td>
-                                        {formatDate(doc.createdAt)}
-                                      </td>
-                                      <td>
-                                        <span
-                                          className={statusBadgeClass(
-                                            doc.status
+                                {filteredPendingDocs
+                                  .slice(0, 7)
+                                  .map((doc) => {
+                                    const name =
+                                      doc.uploadedBy?.user?.name ||
+                                      "N/A";
+                                    return (
+                                      <tr key={doc._id}>
+                                        <td>
+                                          <div className="sos-person">
+                                            <span
+                                              className="sos-avatar"
+                                              style={{
+                                                background:
+                                                  avatarColor(name),
+                                              }}
+                                            >
+                                              {initials(name)}
+                                            </span>
+                                            <div>
+                                              <strong>{name}</strong>
+                                              <small>
+                                                {doc.group?.name ||
+                                                  "No group"}
+                                              </small>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td>
+                                          <strong>{doc.title}</strong>
+                                          <div className="text-muted">
+                                            {documentTypeLabel[
+                                              doc.type
+                                            ] || doc.type}
+                                          </div>
+                                        </td>
+                                        <td>
+                                          {formatDate(
+                                            doc.createdAt ||
+                                              doc.uploadedAt
                                           )}
-                                        >
-                                          {
-                                            documentStatusLabel[
-                                              doc.status
-                                            ]
-                                          }
-                                        </span>
-                                      </td>
-                                      <td>
-                                        <button
-                                          className="edit-btn"
-                                          onClick={() =>
-                                            openReview(doc)
-                                          }
-                                        >
-                                          Open & Review
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  ))}
+                                        </td>
+                                        <td>
+                                          <span className="sos-pill danger">
+                                            Pending Review
+                                          </span>
+                                        </td>
+                                        <td>
+                                          <button
+                                            className="sos-btn-sm"
+                                            onClick={() =>
+                                              openReview(doc)
+                                            }
+                                          >
+                                            Review
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
                               </tbody>
                             </table>
                           </div>
                         )}
                       </div>
-                    </div>
 
-                    <div className="dashboard-section">
-                      <div className="section-header">
-                        <h3>Approved Documents</h3>
-                      </div>
-                      <div className="table-card">
-                        {approvedDocs.length === 0 ? (
+                      <div className="sos-card">
+                        <div className="sos-card-head">
+                          <h3>Student Progress Overview</h3>
+                          <select
+                            className="sos-select"
+                            value={progressGroupFilter}
+                            onChange={(e) =>
+                              setProgressGroupFilter(e.target.value)
+                            }
+                            aria-label="Filter by group"
+                          >
+                            <option value="all">
+                              Filter by Group
+                            </option>
+                            {groups.map((group) => (
+                              <option
+                                key={group._id}
+                                value={group._id}
+                              >
+                                {group.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {studentProgress.length === 0 ? (
                           <div className="empty-state">
-                            <p>No approved documents yet.</p>
+                            <p>No students assigned yet.</p>
                           </div>
                         ) : (
-                          <ul className="simple-list">
-                            {approvedDocs.slice(0, 5).map((doc) => (
-                              <li key={doc._id}>
-                                <span>
-                                  <strong>{doc.title}</strong>
-                                  <small className="text-muted">
-                                    {" "}
-                                    ·{" "}
-                                    {doc.uploadedBy?.user?.name}
-                                  </small>
-                                </span>
-                                <span
-                                  className={statusBadgeClass(
-                                    "approved"
-                                  )}
+                          <div className="sos-progress-list">
+                            {studentProgress
+                              .slice(0, 6)
+                              .map((row) => (
+                                <div
+                                  key={row.id}
+                                  className="sos-progress-item"
                                 >
-                                  Approved
+                                  <div className="sos-progress-top">
+                                    <div>
+                                      <strong>{row.name}</strong>
+                                      <small>
+                                        {row.projectTitle} ·{" "}
+                                        {row.groupName}
+                                      </small>
+                                    </div>
+                                    <div className="sos-progress-meta">
+                                      <strong>{row.pct}%</strong>
+                                      <span
+                                        className={`sos-pill ${
+                                          row.trackTone === "good"
+                                            ? "success"
+                                            : row.trackTone === "bad"
+                                              ? "danger"
+                                              : "muted"
+                                        }`}
+                                      >
+                                        {row.track}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="sos-progress-bar">
+                                    <div
+                                      className={`sos-progress-fill ${
+                                        row.trackTone === "bad"
+                                          ? "danger"
+                                          : ""
+                                      }`}
+                                      style={{
+                                        width: `${Math.min(row.pct, 100)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          className="sos-btn-block"
+                          onClick={() => setTab("students")}
+                        >
+                          View All Progress Reports
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="sos-col-side">
+                      <div className="sos-card sos-actions-card">
+                        <h3>Quick Actions</h3>
+                        <button
+                          type="button"
+                          className="sos-action primary"
+                          onClick={() => setTab("documents")}
+                        >
+                          Review Submissions
+                        </button>
+                        <button
+                          type="button"
+                          className="sos-action"
+                          onClick={() => setTab("students")}
+                        >
+                          View My Students
+                        </button>
+                        <button
+                          type="button"
+                          className="sos-action"
+                          onClick={() => setTab("groups")}
+                        >
+                          View Groups
+                        </button>
+                        <button
+                          type="button"
+                          className="sos-action"
+                          onClick={() => openTaskModal()}
+                        >
+                          Create Task
+                        </button>
+                      </div>
+
+                      <div className="sos-card">
+                        <h3>Upcoming Milestones</h3>
+                        {upcomingMilestones.length === 0 ? (
+                          <div className="empty-state compact">
+                            <p>No upcoming meetings or task due dates.</p>
+                          </div>
+                        ) : (
+                          <ul className="sos-milestone-list">
+                            {upcomingMilestones.map((item) => (
+                              <li key={item.id}>
+                                <div>
+                                  <strong>{item.title}</strong>
+                                  <small>{item.meta}</small>
+                                </div>
+                                <span
+                                  className={`sos-when ${item.tone}`}
+                                >
+                                  {item.when}
                                 </span>
                               </li>
                             ))}
                           </ul>
                         )}
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="dashboard-section">
-                    <h3>My Student Groups</h3>
-                    <div className="table-card">
-                      {groups.length === 0 ? (
-                        <div className="empty-state">
-                          <p>No groups assigned yet.</p>
+                      <div className="sos-card">
+                        <h3>Recent Activity</h3>
+                        {recentActivity.length === 0 ? (
+                          <div className="empty-state compact">
+                            <p>No recent document activity.</p>
+                          </div>
+                        ) : (
+                          <ul className="sos-activity-list">
+                            {recentActivity.map((item) => (
+                              <li key={item.id}>
+                                <span
+                                  className={`sos-activity-dot ${item.tone}`}
+                                />
+                                <div>
+                                  <p>{item.text}</p>
+                                  <small>{item.when}</small>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <button
+                          type="button"
+                          className="sos-link sos-link-block"
+                          onClick={() => setTab("documents")}
+                        >
+                          View Full History
+                        </button>
+                      </div>
+
+                      <div className="sos-card">
+                        <h3>Capacity</h3>
+                        <div className="capacity-preview large">
+                          <div className="capacity-text">
+                            <strong>{memberCount}</strong>
+                            <span> / {maxStudents}</span>
+                          </div>
+                          <div className="capacity-bar">
+                            <div
+                              className="capacity-fill"
+                              style={{
+                                width: `${Math.min(percentage, 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <small>
+                            Unique students across your groups ·
+                            Available slots: {availableSlots}
+                          </small>
                         </div>
-                      ) : (
-                        <div className="table-wrapper">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Code</th>
-                                <th>Name</th>
-                                <th>Members</th>
-                                <th>Status</th>
-                                <th></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {groups.map((group) => (
-                                <tr key={group._id}>
-                                  <td>{group.code}</td>
-                                  <td>{group.name}</td>
-                                  <td>
-                                    {group.members?.length || 0}
-                                  </td>
-                                  <td>
-                                    <span
-                                      className={statusBadgeClass(
-                                        group.status === "active"
-                                          ? "approved"
-                                          : "pending"
-                                      )}
-                                    >
-                                      {group.status}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <button
-                                      className="view-btn"
-                                      onClick={() =>
-                                        setSelectedGroup(group)
-                                      }
-                                    >
-                                      View
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </>
               )}
 
-              {tab === "documents" && (
-                <div className="dashboard-section">
-                  <div className="section-header">
-                    <h3>Document Reviews</h3>
+              {tab === "students" && (
+                <div className="sos-card">
+                  <div className="sos-card-head">
+                    <div>
+                      <h3>My Students</h3>
+                      <p className="sos-card-sub">
+                        Students across your assigned groups
+                      </p>
+                    </div>
                   </div>
-                  <div className="table-card">
-                    {documents.length === 0 ? (
-                      <div className="empty-state">
-                        <p>
-                          No documents from your group students yet.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="table-wrapper">
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Document</th>
-                              <th>Group</th>
-                              <th>Student</th>
-                              <th>Upload Date</th>
-                              <th>Status</th>
-                              <th>Review / Feedback</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {documents.map((doc) => (
-                              <tr key={doc._id}>
+                  {filteredStudents.length === 0 ? (
+                    <div className="empty-state">
+                      <p>No students found.</p>
+                    </div>
+                  ) : (
+                    <div className="table-wrapper">
+                      <table className="sos-table">
+                        <thead>
+                          <tr>
+                            <th>Student</th>
+                            <th>Student ID</th>
+                            <th>Email</th>
+                            <th>Group</th>
+                            <th>Progress</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredStudents.map((student) => {
+                            const name =
+                              student.user?.name || "N/A";
+                            const progress = studentProgress.find(
+                              (p) => p.id === student._id
+                            );
+                            const group =
+                              groups.find((g) =>
+                                (g.members || []).some(
+                                  (m) => (m._id || m) === student._id
+                                )
+                              ) || null;
+                            return (
+                              <tr key={student._id}>
                                 <td>
-                                  <strong>{doc.title}</strong>
-                                  <div className="text-muted">
-                                    {documentTypeLabel[doc.type] ||
-                                      doc.type}
-                                    {doc.originalName
-                                      ? ` · ${doc.originalName}`
-                                      : ""}
+                                  <div className="sos-person">
+                                    <span
+                                      className="sos-avatar"
+                                      style={{
+                                        background: avatarColor(name),
+                                      }}
+                                    >
+                                      {initials(name)}
+                                    </span>
+                                    <strong>{name}</strong>
                                   </div>
                                 </td>
+                                <td>{student.studentId || "N/A"}</td>
                                 <td>
-                                  {doc.group?.name || "N/A"}
-                                  {doc.group?.code
-                                    ? ` (${doc.group.code})`
+                                  {student.user?.email || "N/A"}
+                                </td>
+                                <td>
+                                  {group?.name || "N/A"}
+                                  {group?.code
+                                    ? ` (${group.code})`
                                     : ""}
                                 </td>
                                 <td>
-                                  {doc.uploadedBy?.user?.name ||
-                                    "N/A"}
-                                </td>
-                                <td>
-                                  {formatDate(doc.createdAt)}
-                                </td>
-                                <td>
-                                  <span
-                                    className={statusBadgeClass(
-                                      doc.status
-                                    )}
-                                  >
-                                    {
-                                      documentStatusLabel[
-                                        doc.status
-                                      ]
-                                    }
-                                  </span>
-                                </td>
-                                <td className="doc-feedback-cell">
-                                  {doc.feedback ? (
-                                    <span title={doc.feedback}>
-                                      {doc.feedback.length > 80
-                                        ? `${doc.feedback.slice(0, 80)}…`
-                                        : doc.feedback}
+                                  {progress ? (
+                                    <span
+                                      className={`sos-pill ${
+                                        progress.trackTone === "good"
+                                          ? "success"
+                                          : progress.trackTone ===
+                                              "bad"
+                                            ? "danger"
+                                            : "muted"
+                                      }`}
+                                    >
+                                      {progress.pct}% · {progress.track}
                                     </span>
                                   ) : (
-                                    <span className="text-muted">
-                                      No feedback yet
-                                    </span>
+                                    "—"
                                   )}
                                 </td>
-                                <td>
-                                  <div className="action-buttons">
-                                    <button
-                                      className="edit-btn"
-                                      onClick={() =>
-                                        openReview(doc)
-                                      }
-                                    >
-                                      Open & Review
-                                    </button>
-                                  </div>
-                                </td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === "groups" && (
+                <div className="sos-card">
+                  <div className="sos-card-head">
+                    <div>
+                      <h3>Groups / Rooms</h3>
+                      <p className="sos-card-sub">
+                        Groups assigned to you
+                      </p>
+                    </div>
                   </div>
+                  {groups.length === 0 ? (
+                    <div className="empty-state">
+                      <p>No groups assigned yet.</p>
+                    </div>
+                  ) : (
+                    <div className="table-wrapper">
+                      <table className="sos-table">
+                        <thead>
+                          <tr>
+                            <th>Code</th>
+                            <th>Name</th>
+                            <th>Project</th>
+                            <th>Members</th>
+                            <th>Status</th>
+                            <th />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {groups.map((group) => (
+                            <tr key={group._id}>
+                              <td>{group.code}</td>
+                              <td>{group.name}</td>
+                              <td>
+                                {group.projectTitle || "—"}
+                              </td>
+                              <td>
+                                {group.members?.length || 0}
+                              </td>
+                              <td>
+                                <span
+                                  className={statusBadgeClass(
+                                    group.status === "active"
+                                      ? "approved"
+                                      : "pending"
+                                  )}
+                                >
+                                  {group.status}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  className="sos-btn-sm"
+                                  onClick={() =>
+                                    setSelectedGroup(group)
+                                  }
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {tab === "documents" && (
+                <div className="sos-card">
+                  <div className="sos-card-head">
+                    <h3>Submissions</h3>
+                  </div>
+                  {filteredDocuments.length === 0 ? (
+                    <div className="empty-state">
+                      <p>
+                        No documents from your group students yet.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="table-wrapper">
+                      <table className="sos-table">
+                        <thead>
+                          <tr>
+                            <th>Document</th>
+                            <th>Group</th>
+                            <th>Student</th>
+                            <th>Upload Date</th>
+                            <th>Status</th>
+                            <th>Review / Feedback</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredDocuments.map((doc) => (
+                            <tr key={doc._id}>
+                              <td>
+                                <strong>{doc.title}</strong>
+                                <div className="text-muted">
+                                  {documentTypeLabel[doc.type] ||
+                                    doc.type}
+                                  {doc.originalName
+                                    ? ` · ${doc.originalName}`
+                                    : ""}
+                                </div>
+                              </td>
+                              <td>
+                                {doc.group?.name || "N/A"}
+                                {doc.group?.code
+                                  ? ` (${doc.group.code})`
+                                  : ""}
+                              </td>
+                              <td>
+                                {doc.uploadedBy?.user?.name ||
+                                  "N/A"}
+                              </td>
+                              <td>
+                                {formatDate(doc.createdAt)}
+                              </td>
+                              <td>
+                                <span
+                                  className={statusBadgeClass(
+                                    doc.status
+                                  )}
+                                >
+                                  {
+                                    documentStatusLabel[
+                                      doc.status
+                                    ]
+                                  }
+                                </span>
+                              </td>
+                              <td className="doc-feedback-cell">
+                                {doc.feedback ? (
+                                  <span title={doc.feedback}>
+                                    {doc.feedback.length > 80
+                                      ? `${doc.feedback.slice(0, 80)}…`
+                                      : doc.feedback}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted">
+                                    No feedback yet
+                                  </span>
+                                )}
+                              </td>
+                              <td>
+                                <div className="action-buttons">
+                                  <button
+                                    className="sos-btn-sm"
+                                    onClick={() =>
+                                      openReview(doc)
+                                    }
+                                  >
+                                    Open & Review
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
               {tab === "tasks" && (
-                <div className="dashboard-section">
-                  <div className="section-header">
+                <div className="sos-card">
+                  <div className="sos-card-head">
                     <h3>Tasks</h3>
                     <button
                       className="primary-btn"
@@ -785,34 +1526,51 @@ function SupervisorDashboard() {
                       + Create Task
                     </button>
                   </div>
-                  <div className="table-card">
-                    {tasks.length === 0 ? (
-                      <div className="empty-state">
-                        <p>
-                          No tasks yet. Create one for your group
-                          students.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="table-wrapper">
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Title</th>
-                              <th>Student</th>
-                              <th>Due</th>
-                              <th>Priority</th>
-                              <th>Status</th>
-                              <th>Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {tasks.map((task) => (
+                  {tasks.length === 0 ? (
+                    <div className="empty-state">
+                      <p>
+                        No tasks yet. Create one for your group
+                        students.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="table-wrapper">
+                      <table className="sos-table">
+                        <thead>
+                          <tr>
+                            <th>Title</th>
+                            <th>Assigned Group</th>
+                            <th>Assignment Type</th>
+                            <th>Assigned Student</th>
+                            <th>Due</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tasks.map((task) => {
+                            const type = getTaskAssignmentType(task);
+                            return (
                               <tr key={task._id}>
                                 <td>{task.title}</td>
                                 <td>
-                                  {task.assignedTo?.user?.name ||
-                                    "N/A"}
+                                  {task.group?.name || "—"}
+                                  {task.group?.code
+                                    ? ` (${task.group.code})`
+                                    : ""}
+                                </td>
+                                <td>
+                                  <span className="badge badge-muted">
+                                    {taskAssignmentTypeLabel[type] ||
+                                      type}
+                                  </span>
+                                </td>
+                                <td>
+                                  {type === "all_group"
+                                    ? "All members"
+                                    : task.assignedTo?.user?.name ||
+                                      "N/A"}
                                 </td>
                                 <td>
                                   {formatDate(task.dueDate)}
@@ -848,149 +1606,73 @@ function SupervisorDashboard() {
                                   </div>
                                 </td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
               {tab === "meetings" && (
-                <div className="dashboard-section">
-                  <div className="section-header">
-                    <h3>Meetings</h3>
-                    <button
-                      className="primary-btn"
-                      onClick={() => openMeetingModal()}
-                    >
-                      + Create Meeting
-                    </button>
-                  </div>
-
-                  <div className="dashboard-section">
-                    <h4>Upcoming</h4>
-                    <div className="table-card">
-                      {upcomingMeetings.length === 0 ? (
-                        <div className="empty-state">
-                          <p>No upcoming meetings.</p>
-                        </div>
-                      ) : (
-                        <div className="table-wrapper">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Title</th>
-                                <th>Date</th>
-                                <th>Time</th>
-                                <th>Location / Link</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {upcomingMeetings.map((meeting) => (
-                                <tr key={meeting._id}>
-                                  <td>{meeting.title}</td>
-                                  <td>
-                                    {formatDate(meeting.date)}
-                                  </td>
-                                  <td>{meeting.time}</td>
-                                  <td>
-                                    {meeting.meetingLink ||
-                                      meeting.location ||
-                                      "N/A"}
-                                  </td>
-                                  <td>
-                                    <span
-                                      className={statusBadgeClass(
-                                        meeting.status
-                                      )}
-                                    >
-                                      {
-                                        meetingStatusLabel[
-                                          meeting.status
-                                        ]
-                                      }
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <div className="action-buttons">
-                                      <button
-                                        className="edit-btn"
-                                        onClick={() =>
-                                          openMeetingModal(meeting)
-                                        }
-                                      >
-                                        Edit
-                                      </button>
-                                      <button
-                                        className="delete-btn"
-                                        onClick={() =>
-                                          cancelMeeting(
-                                            meeting._id
-                                          )
-                                        }
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                <>
+                  <div className="sos-card" style={{ marginBottom: 18 }}>
+                    <div className="sos-card-head">
+                      <h3>Meetings</h3>
+                      <button
+                        className="primary-btn"
+                        onClick={() => openMeetingModal()}
+                      >
+                        + Create Meeting
+                      </button>
                     </div>
-                  </div>
-
-                  <div className="dashboard-section">
-                    <h4>All Meetings</h4>
-                    <div className="table-card">
-                      {meetings.length === 0 ? (
-                        <div className="empty-state">
-                          <p>No meetings created yet.</p>
-                        </div>
-                      ) : (
-                        <div className="table-wrapper">
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Title</th>
-                                <th>Group</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {meetings.map((meeting) => (
-                                <tr key={meeting._id}>
-                                  <td>{meeting.title}</td>
-                                  <td>
-                                    {meeting.group?.name ||
-                                      "Selected students"}
-                                  </td>
-                                  <td>
-                                    {formatDate(meeting.date)}{" "}
-                                    {meeting.time}
-                                  </td>
-                                  <td>
-                                    <span
-                                      className={statusBadgeClass(
+                    <h4 className="sos-subhead">Upcoming</h4>
+                    {upcomingMeetings.length === 0 ? (
+                      <div className="empty-state">
+                        <p>No upcoming meetings.</p>
+                      </div>
+                    ) : (
+                      <div className="table-wrapper">
+                        <table className="sos-table">
+                          <thead>
+                            <tr>
+                              <th>Title</th>
+                              <th>Date</th>
+                              <th>Time</th>
+                              <th>Location / Link</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {upcomingMeetings.map((meeting) => (
+                              <tr key={meeting._id}>
+                                <td>{meeting.title}</td>
+                                <td>
+                                  {formatDate(meeting.date)}
+                                </td>
+                                <td>{meeting.time}</td>
+                                <td>
+                                  {meeting.meetingLink ||
+                                    meeting.location ||
+                                    "N/A"}
+                                </td>
+                                <td>
+                                  <span
+                                    className={statusBadgeClass(
+                                      meeting.status
+                                    )}
+                                  >
+                                    {
+                                      meetingStatusLabel[
                                         meeting.status
-                                      )}
-                                    >
-                                      {
-                                        meetingStatusLabel[
-                                          meeting.status
-                                        ]
-                                      }
-                                    </span>
-                                  </td>
-                                  <td>
+                                      ]
+                                    }
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="action-buttons">
                                     <button
                                       className="edit-btn"
                                       onClick={() =>
@@ -999,21 +1681,199 @@ function SupervisorDashboard() {
                                     >
                                       Edit
                                     </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                                    <button
+                                      className="delete-btn"
+                                      onClick={() =>
+                                        cancelMeeting(
+                                          meeting._id
+                                        )
+                                      }
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="sos-card">
+                    <h4 className="sos-subhead">All Meetings</h4>
+                    {meetings.length === 0 ? (
+                      <div className="empty-state">
+                        <p>No meetings created yet.</p>
+                      </div>
+                    ) : (
+                      <div className="table-wrapper">
+                        <table className="sos-table">
+                          <thead>
+                            <tr>
+                              <th>Title</th>
+                              <th>Group</th>
+                              <th>Date</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {meetings.map((meeting) => (
+                              <tr key={meeting._id}>
+                                <td>{meeting.title}</td>
+                                <td>
+                                  {meeting.group?.name ||
+                                    "Selected students"}
+                                </td>
+                                <td>
+                                  {formatDate(meeting.date)}{" "}
+                                  {meeting.time}
+                                </td>
+                                <td>
+                                  <span
+                                    className={statusBadgeClass(
+                                      meeting.status
+                                    )}
+                                  >
+                                    {
+                                      meetingStatusLabel[
+                                        meeting.status
+                                      ]
+                                    }
+                                  </span>
+                                </td>
+                                <td>
+                                  <button
+                                    className="edit-btn"
+                                    onClick={() =>
+                                      openMeetingModal(meeting)
+                                    }
+                                  >
+                                    Edit
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {tab === "guidelines" && (
+                <div className="sos-card">
+                  <div className="sos-card-head">
+                    <h3>Thesis Guidelines</h3>
+                  </div>
+                  <p className="field-hint" style={{ marginBottom: 16 }}>
+                    Share these chapter expectations with your assigned
+                    students when reviewing submissions.
+                  </p>
+                  <div className="table-wrapper">
+                    <table className="sos-table">
+                      <thead>
+                        <tr>
+                          <th>Chapter</th>
+                          <th>Focus</th>
+                          <th>Word count</th>
+                          <th>Target</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {THESIS_GUIDELINES.map((guide) => (
+                          <tr key={guide.id}>
+                            <td>
+                              <strong>{guide.title}</strong>
+                            </td>
+                            <td>{guide.requirements}</td>
+                            <td>{guide.wordCount}</td>
+                            <td>{guide.dueLabel}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {tab === "profile" && (
+                <div className="sos-card">
+                  <div className="sos-card-head">
+                    <h3>My Profile</h3>
+                  </div>
+                  <div className="form-stack" style={{ padding: "4px 4px 12px" }}>
+                    <div className="form-group">
+                      <label>Name</label>
+                      <input value={user?.name || ""} readOnly />
                     </div>
+                    <div className="form-group">
+                      <label>Email</label>
+                      <input value={user?.email || ""} readOnly />
+                    </div>
+                    <div className="form-group">
+                      <label>Employee ID</label>
+                      <input
+                        value={supervisor?.employeeId || "—"}
+                        readOnly
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Department</label>
+                      <input
+                        value={supervisor?.department?.name || "—"}
+                        readOnly
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Specialization</label>
+                      <input
+                        value={
+                          supervisor?.specialization || specialization
+                        }
+                        readOnly
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Assigned students</label>
+                      <input
+                        value={String(memberCount)}
+                        readOnly
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tab === "settings" && (
+                <div className="sos-card">
+                  <div className="sos-card-head">
+                    <h3>Settings</h3>
+                  </div>
+                  <div className="form-stack" style={{ padding: "4px 4px 12px" }}>
+                    <div className="form-group">
+                      <label>Account email</label>
+                      <input value={user?.email || ""} readOnly />
+                    </div>
+                    <div className="form-group">
+                      <label>Role</label>
+                      <input value="Supervisor" readOnly />
+                    </div>
+                    <p className="field-hint">
+                      Password and security changes are managed by your
+                      institution administrator. Use Profile for academic
+                      details.
+                    </p>
                   </div>
                 </div>
               )}
             </>
           )}
         </section>
-      </main>
+      </div>
 
       {reviewDoc && (
         <DocumentReviewViewer
@@ -1036,7 +1896,10 @@ function SupervisorDashboard() {
                 <h3>
                   {editingTask ? "Edit Task" : "Create Task"}
                 </h3>
-                <p>Assign work to a student in your groups</p>
+                <p>
+                  Choose a group, then assign to all members or one
+                  student
+                </p>
               </div>
               <button
                 className="close-btn"
@@ -1063,46 +1926,50 @@ function SupervisorDashboard() {
                 <div className="form-group">
                   <label>Group</label>
                   <select
+                    required
                     value={taskForm.group}
+                    disabled={Boolean(editingTask)}
                     onChange={(e) =>
                       setTaskForm((prev) => ({
                         ...prev,
                         group: e.target.value,
                         assignedTo: "",
-                        assignToGroup: false,
                       }))
                     }
-                    required={taskForm.assignToGroup}
                   >
-                    <option value="">Select group (optional)</option>
+                    <option value="">Select group</option>
                     {groups.map((group) => (
                       <option key={group._id} value={group._id}>
                         {group.name}
+                        {group.code ? ` (${group.code})` : ""}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Assignment Target</label>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={taskForm.assignToGroup}
-                      disabled={!taskForm.group || Boolean(editingTask)}
-                      onChange={(e) =>
-                        setTaskForm((prev) => ({
-                          ...prev,
-                          assignToGroup: e.target.checked,
-                          assignedTo: e.target.checked
+                  <label>Assignment Type</label>
+                  <select
+                    required
+                    value={taskForm.assignmentType}
+                    disabled={Boolean(editingTask)}
+                    onChange={(e) =>
+                      setTaskForm((prev) => ({
+                        ...prev,
+                        assignmentType: e.target.value,
+                        assignedTo:
+                          e.target.value === "all_group"
                             ? ""
                             : prev.assignedTo,
-                        }))
-                      }
-                    />
-                    <span>Assign to entire group</span>
-                  </label>
+                      }))
+                    }
+                  >
+                    <option value="all_group">All Group</option>
+                    <option value="single_student">
+                      Single Student
+                    </option>
+                  </select>
                 </div>
-                {!taskForm.assignToGroup && (
+                {taskForm.assignmentType === "single_student" && (
                   <div className="form-group full-width">
                     <label>Assigned Student</label>
                     <select
@@ -1130,6 +1997,21 @@ function SupervisorDashboard() {
                     </select>
                   </div>
                 )}
+                {taskForm.assignmentType === "all_group" &&
+                  taskForm.group && (
+                    <div className="form-group full-width">
+                      <p className="field-hint">
+                        One task will be registered for the selected
+                        group. All{" "}
+                        {studentsForGroup(taskForm.group).length}{" "}
+                        member
+                        {studentsForGroup(taskForm.group).length === 1
+                          ? ""
+                          : "s"}{" "}
+                        can access it.
+                      </p>
+                    </div>
+                  )}
                 <div className="form-group">
                   <label>Due Date</label>
                   <input

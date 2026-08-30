@@ -9,6 +9,7 @@ const {
   getSupervisorCapacitySnapshot,
   buildCapacityFields,
 } = require("../utils/supervisorCapacity");
+const { generateEmployeeId } = require("../utils/idGenerator");
 
 // =====================================================
 // GET ALL SUPERVISORS
@@ -146,7 +147,6 @@ const createSupervisor = async (
       name,
       email,
       password,
-      employeeId,
       department,
       specialization,
       phone,
@@ -161,13 +161,12 @@ const createSupervisor = async (
       !name ||
       !email ||
       !password ||
-      !employeeId ||
       !department
     ) {
       return res.status(400).json({
         success: false,
         message:
-          "Name, email, password, employee ID and department are required",
+          "Name, email, password and department are required",
       });
     }
 
@@ -189,23 +188,6 @@ const createSupervisor = async (
     }
 
     // -----------------------------------------------
-    // CHECK EXISTING EMPLOYEE ID
-    // -----------------------------------------------
-
-    const existingSupervisor =
-      await Supervisor.findOne({
-        employeeId,
-      });
-
-    if (existingSupervisor) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Employee ID already exists",
-      });
-    }
-
-    // -----------------------------------------------
     // CHECK DEPARTMENT EXISTS
     // -----------------------------------------------
 
@@ -221,6 +203,8 @@ const createSupervisor = async (
           "Department not found",
       });
     }
+
+    const employeeId = await generateEmployeeId();
 
     // -----------------------------------------------
     // CREATE USER (hashed password)
@@ -244,8 +228,7 @@ const createSupervisor = async (
     const supervisor =
       await Supervisor.create({
         user: user._id,
-        employeeId:
-          employeeId.trim(),
+        employeeId,
         department,
         specialization:
           specialization?.trim() || "",
@@ -319,38 +302,13 @@ const updateSupervisor = async (
     const {
       name,
       email,
-      employeeId,
       department,
       specialization,
       phone,
       maxStudents,
     } = req.body;
 
-    // -----------------------------------------------
-    // CHECK EMPLOYEE ID
-    // -----------------------------------------------
-
-    if (employeeId) {
-      const existingSupervisor =
-        await Supervisor.findOne({
-          employeeId:
-            employeeId.trim(),
-          _id: {
-            $ne: supervisor._id,
-          },
-        });
-
-      if (existingSupervisor) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Employee ID already exists",
-        });
-      }
-
-      supervisor.employeeId =
-        employeeId.trim();
-    }
+    // employeeId is system-generated and not editable
 
     // -----------------------------------------------
     // UPDATE SUPERVISOR FIELDS
