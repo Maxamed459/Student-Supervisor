@@ -164,7 +164,7 @@ Files are uploaded **directly from the browser to Cloudinary** — they never pa
 git checkout -b feat/short-description
 # ...make changes...
 git add .
-git commit -m "feat: short description"
+git commit -m "feat: short description that explains the commit"
 git push origin feat/short-description
 ```
 
