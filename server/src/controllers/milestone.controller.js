@@ -7,21 +7,50 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { recordAudit } from '../services/auditLog.service.js';
 import { notifyMany } from '../services/notification.service.js';
 import { guidelinePublishedEmail, taskCreatedEmail } from '../templates/emailTemplates.js';
+import { getSupervisorGroupIds } from './group.controller.js';
 
-const resolveAudience = async ({ supervisorId, groupId }) => {
-  const filter = { role: 'student', supervisorId };
-  if (groupId) filter.groupId = groupId;
-  return User.find(filter);
+// Returns true when `caller` is allowed to read/edit/delete `milestone`
+// under the new Group-centric model. Admin is always allowed. Otherwise
+// the caller must share a Group with the milestone.
+const sharesGroupWithMilestone = async (caller, milestone) => {
+  if (caller.role === 'admin') return true;
+  if (caller.role === 'student') {
+    return Boolean(caller.groupId && caller.groupId.toString() === milestone.groupId.toString());
+  }
+  if (caller.role === 'supervisor') {
+    if (
+      milestone.supervisorId &&
+      caller._id.toString() === milestone.supervisorId.toString()
+    ) {
+      return true;
+    }
+    const myGroupIds = await getSupervisorGroupIds(caller._id);
+    return myGroupIds.includes(milestone.groupId.toString());
+  }
+  return false;
+};
+
+const resolveAudience = async ({ groupId }) => {
+  return User.find({ groupId, role: 'student' });
 };
 
 // POST /api/milestones — Supervisor publishes guideline/task (FR-S2)
+// The supervisor MUST belong to the group they're publishing into.
 export const createMilestone = asyncHandler(async (req, res) => {
   const { title, description, order, dueDate, groupId, attachments } = req.body;
   if (!title) throw new ApiError(400, 'title is required.');
+  if (!groupId) throw new ApiError(400, 'groupId is required.');
+
+  if (req.user.role !== 'admin') {
+    const myGroupIds = await getSupervisorGroupIds(req.user._id);
+    if (!myGroupIds.includes(groupId.toString())) {
+      throw new ApiError(403, 'You can only publish milestones into a group you belong to.');
+    }
+  }
 
   const milestone = await Milestone.create({
     supervisorId: req.user._id,
-    groupId: groupId || null,
+    groupId,
     title,
     description,
     order,
@@ -34,10 +63,11 @@ export const createMilestone = asyncHandler(async (req, res) => {
     action: 'milestone.create',
     entityType: 'Milestone',
     entityId: milestone._id,
+    metadata: { groupId: milestone.groupId },
   });
 
-  // Notify all assigned students (FR-N2 guideline published / FR-N3 task created)
-  const students = await resolveAudience({ supervisorId: req.user._id, groupId });
+  // Notify every student in the Group (FR-N2 / FR-N3)
+  const students = await resolveAudience({ groupId: milestone.groupId });
   const isTask = Boolean(dueDate);
 
   await notifyMany(students, (student) => ({
@@ -46,7 +76,7 @@ export const createMilestone = asyncHandler(async (req, res) => {
     message: isTask
       ? `New task published: ${title}`
       : `New guideline published: ${title}`,
-    link: '/student/milestones',
+    link: '/student/assignments',
     emailSubject: isTask ? 'New Milestone Task' : 'New Guideline Published',
     emailHtml: isTask
       ? taskCreatedEmail({
@@ -70,13 +100,18 @@ export const listMilestones = asyncHandler(async (req, res) => {
   const filter = {};
 
   if (req.user.role === 'supervisor') {
-    filter.supervisorId = req.user._id;
+    // A supervisor sees the milestones of every Group they belong to,
+    // AND the milestones they themselves published (attribution).
+    const myGroupIds = await getSupervisorGroupIds(req.user._id);
+    filter.$or = [
+      { groupId: { $in: myGroupIds } },
+      { supervisorId: req.user._id },
+    ];
   } else if (req.user.role === 'student') {
-    if (!req.user.supervisorId) {
+    if (!req.user.groupId) {
       return res.status(200).json(new ApiResponse(200, { milestones: [] }));
     }
-    filter.supervisorId = req.user.supervisorId;
-    filter.$or = [{ groupId: null }, { groupId: req.user.groupId }];
+    filter.groupId = req.user.groupId;
   } else if (req.query.supervisorId) {
     filter.supervisorId = req.query.supervisorId;
   }
@@ -85,7 +120,7 @@ export const listMilestones = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, { milestones }));
 });
 
-// GET /api/students/:id/milestones (FR-T2)
+// GET /api/students/:id/milestones (FR-T2) — Group-scoped
 export const listMilestonesForStudent = asyncHandler(async (req, res) => {
   const student = await User.findOne({ _id: req.params.id, role: 'student' });
   if (!student) throw new ApiError(404, 'Student not found.');
@@ -96,21 +131,23 @@ export const listMilestonesForStudent = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(403, 'You may only view your own milestones.');
   }
-  if (
-    req.user.role === 'supervisor' &&
-    (!student.supervisorId || student.supervisorId.toString() !== req.user._id.toString())
-  ) {
-    throw new ApiError(403, 'This student is not assigned to you.');
-  }
 
-  if (!student.supervisorId) {
+  if (!student.groupId) {
     return res.status(200).json(new ApiResponse(200, { milestones: [] }));
   }
 
-  const milestones = await Milestone.find({
-    supervisorId: student.supervisorId,
-    $or: [{ groupId: null }, { groupId: student.groupId }],
-  }).sort({ order: 1, createdAt: 1 });
+  // Supervisors must share a group with the student.
+  if (req.user.role === 'supervisor') {
+    const myGroupIds = await getSupervisorGroupIds(req.user._id);
+    if (!myGroupIds.includes(student.groupId.toString())) {
+      throw new ApiError(403, 'This student is not in any of your groups.');
+    }
+  }
+
+  const milestones = await Milestone.find({ groupId: student.groupId }).sort({
+    order: 1,
+    createdAt: 1,
+  });
 
   res.status(200).json(new ApiResponse(200, { milestones }));
 });
@@ -119,6 +156,11 @@ export const listMilestonesForStudent = asyncHandler(async (req, res) => {
 export const getMilestone = asyncHandler(async (req, res) => {
   const milestone = await Milestone.findById(req.params.id);
   if (!milestone) throw new ApiError(404, 'Milestone not found.');
+
+  if (!(await sharesGroupWithMilestone(req.user, milestone))) {
+    throw new ApiError(403, 'You do not have access to this milestone.');
+  }
+
   res.status(200).json(new ApiResponse(200, { milestone }));
 });
 
@@ -127,17 +169,28 @@ export const updateMilestone = asyncHandler(async (req, res) => {
   const milestone = await Milestone.findById(req.params.id);
   if (!milestone) throw new ApiError(404, 'Milestone not found.');
 
-  if (milestone.supervisorId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-    throw new ApiError(403, 'You may only edit your own milestones.');
+  // Only the original publisher or an Admin can edit a milestone
+  // (Group co-supervisors can read but not edit each other's posts).
+  if (
+    milestone.supervisorId.toString() !== req.user._id.toString() &&
+    req.user.role !== 'admin'
+  ) {
+    throw new ApiError(403, 'You may only edit milestones you published.');
   }
 
-  const { title, description, order, dueDate, attachments, isPublished } = req.body;
+  const { title, description, order, dueDate, attachments, isPublished, groupId } = req.body;
   if (title !== undefined) milestone.title = title;
   if (description !== undefined) milestone.description = description;
   if (order !== undefined) milestone.order = order;
   if (dueDate !== undefined) milestone.dueDate = dueDate;
   if (attachments !== undefined) milestone.attachments = attachments;
   if (isPublished !== undefined) milestone.isPublished = isPublished;
+  if (groupId !== undefined) {
+    if (req.user.role !== 'admin') {
+      throw new ApiError(403, 'Only admins may move a milestone to a different group.');
+    }
+    milestone.groupId = groupId;
+  }
 
   await milestone.save();
 
@@ -156,8 +209,11 @@ export const deleteMilestone = asyncHandler(async (req, res) => {
   const milestone = await Milestone.findById(req.params.id);
   if (!milestone) throw new ApiError(404, 'Milestone not found.');
 
-  if (milestone.supervisorId.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-    throw new ApiError(403, 'You may only delete your own milestones.');
+  if (
+    milestone.supervisorId.toString() !== req.user._id.toString() &&
+    req.user.role !== 'admin'
+  ) {
+    throw new ApiError(403, 'You may only delete milestones you published.');
   }
 
   await milestone.deleteOne();

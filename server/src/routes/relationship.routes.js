@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, authorize } from '../middleware/auth.js';
 import {
+  getGroupForStudent,
   listStudentsForSupervisor,
   getSupervisorForStudent,
   getAdminDashboard,
@@ -30,6 +31,14 @@ router.get(
   authenticate,
   authorize('admin', 'supervisor', 'student'),
   getSupervisorForStudent
+);
+
+// Student group details for the shared frontend workspace
+router.get(
+  '/students/:id/group',
+  authenticate,
+  authorize('admin', 'supervisor', 'student'),
+  getGroupForStudent
 );
 
 // FR-T2

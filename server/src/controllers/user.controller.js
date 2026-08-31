@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Group from '../models/Group.js';
@@ -7,16 +6,24 @@ import ApiResponse from '../utils/apiResponse.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { recordAudit } from '../services/auditLog.service.js';
 import { notify } from '../services/notification.service.js';
-import { assignmentEmail, accountCreatedEmail } from '../templates/emailTemplates.js';
-
-const generateTempPassword = () => crypto.randomBytes(6).toString('hex');
+import { accountCreatedEmail, groupAssignmentEmail } from '../templates/emailTemplates.js';
+import { removeMember } from './group.controller.js';
 
 // POST /api/users — Admin creates Supervisor/Student (and Admin) accounts (FR-A1)
+// The admin supplies the password; the cleartext is returned once in the
+// response so the admin can hand it to the new user, and a welcome email
+// with the same credentials is sent via Gmail OAuth2 (best-effort — email
+// failures never block account creation).
+// `groupId` is OPTIONAL at creation — the admin can assign the user to a
+// Group immediately or later from the Group management UI.
 export const createUser = asyncHandler(async (req, res) => {
-  const { fullName, email, role, groupId, supervisorId, phone } = req.body;
+  const { fullName, email, role, groupId, phone, password } = req.body;
 
   if (!fullName || !email || !role) {
     throw new ApiError(400, 'fullName, email and role are required.');
+  }
+  if (!password || String(password).length < 8) {
+    throw new ApiError(400, 'password is required and must be at least 8 characters.');
   }
   if (!['admin', 'supervisor', 'student'].includes(role)) {
     throw new ApiError(400, 'role must be one of admin, supervisor, student.');
@@ -30,13 +37,7 @@ export const createUser = asyncHandler(async (req, res) => {
     if (!group) throw new ApiError(404, 'Group not found.');
   }
 
-  if (role === 'student' && supervisorId) {
-    const supervisor = await User.findOne({ _id: supervisorId, role: 'supervisor' });
-    if (!supervisor) throw new ApiError(404, 'Supervisor not found.');
-  }
-
-  const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 12);
+  const passwordHash = await bcrypt.hash(password, 12);
 
   const user = await User.create({
     fullName,
@@ -44,60 +45,74 @@ export const createUser = asyncHandler(async (req, res) => {
     passwordHash,
     role,
     groupId: groupId || null,
-    supervisorId: role === 'student' ? supervisorId || null : null,
     phone: phone || null,
     mustChangePassword: true,
   });
+
+  // If a group was specified at creation, register the user in the
+  // Group's supervisorIds[] (for supervisors) — students are picked up
+  // by the getGroupForStudent / listGroups queries that scan User.groupId.
+  let assignedGroup = null;
+  if (groupId) {
+    if (role === 'supervisor') {
+      await Group.updateOne(
+        { _id: groupId },
+        { $addToSet: { supervisorIds: user._id } }
+      );
+    }
+    assignedGroup = await Group.findById(groupId);
+  }
 
   await recordAudit({
     userId: req.user._id,
     action: 'user.create',
     entityType: 'User',
     entityId: user._id,
-    metadata: { role },
+    metadata: { role, groupId: groupId || null },
   });
 
-  // FR-N1-style welcome email with credentials
+  // Best-effort welcome email with the account's credentials (FR-N1-style).
+  // Failure here must never block account creation — `notify()` already
+  // swallows email errors and records them on the Notification document.
   await notify({
     recipient: user,
     type: 'account_created',
     message: `Your ${role} account has been created.`,
     link: '/login',
     emailSubject: 'Welcome to Student Supervisor System — Your Account Details',
-    emailHtml: accountCreatedEmail({ fullName, email: user.email, tempPassword, role }),
+    emailHtml: accountCreatedEmail({ fullName, email: user.email, password, role }),
   });
 
-  // If a student was assigned to a supervisor at creation time, fire FR-N1
-  if (role === 'student' && supervisorId) {
-    const supervisor = await User.findById(supervisorId);
-    if (supervisor) {
-      await notify({
-        recipient: supervisor,
-        type: 'assignment',
-        message: `${fullName} has been assigned to you as a student.`,
-        link: '/supervisor/students',
-        emailSubject: 'New Student Assigned',
-        emailHtml: assignmentEmail({
-          studentName: fullName,
-          supervisorName: supervisor.fullName,
-          forStudent: false,
-        }),
-      });
-    }
+  if (assignedGroup) {
+    await notify({
+      recipient: user,
+      type: 'assignment',
+      message: `You have been added to the group "${assignedGroup.name}".`,
+      link: role === 'student' ? '/student/my-group' : '/supervisor/groups',
+      emailSubject: 'Added to a Group',
+      emailHtml: groupAssignmentEmail({
+        recipientName: fullName,
+        groupName: assignedGroup.name,
+        role,
+      }),
+    });
   }
 
-  res
-    .status(201)
-    .json(new ApiResponse(201, { user: user.toSafeObject() }, 'User created successfully'));
+  res.status(201).json(
+    new ApiResponse(
+      201,
+      { user: user.toSafeObject(), password },
+      'User created successfully. Share the password with the new user — it will not be shown again.'
+    )
+  );
 });
 
 // GET /api/users — list/filter users (supports Admin dashboards, FR-A5)
 export const listUsers = asyncHandler(async (req, res) => {
-  const { role, groupId, supervisorId, search, page = 1, limit = 20 } = req.query;
+  const { role, groupId, search, page = 1, limit = 20 } = req.query;
   const filter = {};
   if (role) filter.role = role;
   if (groupId) filter.groupId = groupId;
-  if (supervisorId) filter.supervisorId = supervisorId;
   if (search) {
     filter.$or = [
       { fullName: { $regex: search, $options: 'i' } },
@@ -126,28 +141,56 @@ export const getUser = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, { user: user.toSafeObject() }));
 });
 
-// PATCH /api/users/:id — edit, deactivate, reassign supervisor (FR-A1, FR-A4)
+// PATCH /api/users/:id — edit, deactivate, reset password, change group membership (FR-A1, FR-A4)
 export const updateUser = asyncHandler(async (req, res) => {
-  const { fullName, phone, isActive, supervisorId, groupId } = req.body;
+  const { fullName, phone, isActive, groupId, password } = req.body;
 
   const user = await User.findById(req.params.id);
   if (!user) throw new ApiError(404, 'User not found.');
 
-  const previousSupervisorId = user.supervisorId ? user.supervisorId.toString() : null;
+  const previousGroupId = user.groupId ? user.groupId.toString() : null;
+  const nextGroupId = groupId === undefined ? previousGroupId : (groupId || null);
+  const groupChanged =
+    groupId !== undefined &&
+    nextGroupId !== previousGroupId &&
+    (user.role === 'student' || user.role === 'supervisor');
 
+  // Apply simple field changes directly on the single `user` document we
+  // already have in memory — everything below is saved together in one
+  // `user.save()` call so no change here can be silently lost by a
+  // separately-fetched copy overwriting it (see git history for the bug
+  // this replaced: group-membership changes used to re-fetch the user
+  // and save that copy instead of this one).
   if (fullName !== undefined) user.fullName = fullName;
   if (phone !== undefined) user.phone = phone;
   if (isActive !== undefined) user.isActive = isActive;
-  if (groupId !== undefined) user.groupId = groupId || null;
 
-  let reassigned = false;
-  if (supervisorId !== undefined && user.role === 'student') {
-    if (supervisorId) {
-      const supervisor = await User.findOne({ _id: supervisorId, role: 'supervisor' });
-      if (!supervisor) throw new ApiError(404, 'Supervisor not found.');
+  let passwordWasReset = false;
+  if (password !== undefined && password !== '') {
+    if (String(password).length < 8) {
+      throw new ApiError(400, 'password must be at least 8 characters.');
     }
-    if ((supervisorId || null) !== previousSupervisorId) reassigned = true;
-    user.supervisorId = supervisorId || null;
+    user.passwordHash = await bcrypt.hash(password, 12);
+    user.mustChangePassword = true;
+    user.refreshTokenVersion = (user.refreshTokenVersion || 0) + 1; // force re-login everywhere
+    passwordWasReset = true;
+  }
+
+  if (groupChanged) {
+    // Detach from the previous group's supervisor roster (if applicable).
+    if (previousGroupId && user.role === 'supervisor') {
+      await Group.updateOne({ _id: previousGroupId }, { $pull: { supervisorIds: user._id } });
+    }
+    // Attach to the new group's supervisor roster (if applicable).
+    if (nextGroupId && user.role === 'supervisor') {
+      const group = await Group.findById(nextGroupId);
+      if (!group) throw new ApiError(404, 'Group not found.');
+      await Group.updateOne({ _id: nextGroupId }, { $addToSet: { supervisorIds: user._id } });
+    } else if (nextGroupId) {
+      const group = await Group.findById(nextGroupId);
+      if (!group) throw new ApiError(404, 'Group not found.');
+    }
+    user.groupId = nextGroupId;
   }
 
   await user.save();
@@ -157,39 +200,24 @@ export const updateUser = asyncHandler(async (req, res) => {
     action: 'user.update',
     entityType: 'User',
     entityId: user._id,
-    metadata: { reassigned },
+    metadata: { groupIdChanged: groupChanged, passwordReset: passwordWasReset },
   });
 
-  // FR-A4: reassignment notification
-  if (reassigned && user.supervisorId) {
-    const supervisor = await User.findById(user.supervisorId);
-    if (supervisor) {
-      await Promise.all([
-        notify({
-          recipient: user,
-          type: 'assignment',
-          message: `You have been reassigned to supervisor ${supervisor.fullName}.`,
-          link: '/student/supervisor',
-          emailSubject: 'Supervisor Assignment Updated',
-          emailHtml: assignmentEmail({
-            studentName: user.fullName,
-            supervisorName: supervisor.fullName,
-            forStudent: true,
-          }),
+  if (groupChanged && nextGroupId) {
+    const group = await Group.findById(nextGroupId);
+    if (group) {
+      await notify({
+        recipient: user,
+        type: 'assignment',
+        message: `You have been added to the group "${group.name}".`,
+        link: user.role === 'student' ? '/student/my-group' : '/supervisor/groups',
+        emailSubject: 'Added to a Group',
+        emailHtml: groupAssignmentEmail({
+          recipientName: user.fullName,
+          groupName: group.name,
+          role: user.role,
         }),
-        notify({
-          recipient: supervisor,
-          type: 'assignment',
-          message: `${user.fullName} has been assigned to you.`,
-          link: '/supervisor/students',
-          emailSubject: 'New Student Assigned',
-          emailHtml: assignmentEmail({
-            studentName: user.fullName,
-            supervisorName: supervisor.fullName,
-            forStudent: false,
-          }),
-        }),
-      ]);
+      });
     }
   }
 
@@ -201,6 +229,10 @@ export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) throw new ApiError(404, 'User not found.');
 
+  if (user.groupId) {
+    await removeMember(user.groupId, user._id);
+  }
+
   await user.deleteOne();
 
   await recordAudit({
@@ -211,60 +243,6 @@ export const deleteUser = asyncHandler(async (req, res) => {
   });
 
   res.status(200).json(new ApiResponse(200, null, 'User deleted'));
-});
-
-// POST /api/users/:id/assign-supervisor — dedicated endpoint for FR-A3
-export const assignSupervisor = asyncHandler(async (req, res) => {
-  const { supervisorId } = req.body;
-  if (!supervisorId) throw new ApiError(400, 'supervisorId is required.');
-
-  const student = await User.findOne({ _id: req.params.id, role: 'student' });
-  if (!student) throw new ApiError(404, 'Student not found.');
-
-  const supervisor = await User.findOne({ _id: supervisorId, role: 'supervisor' });
-  if (!supervisor) throw new ApiError(404, 'Supervisor not found.');
-
-  student.supervisorId = supervisor._id;
-  await student.save();
-
-  await recordAudit({
-    userId: req.user._id,
-    action: 'user.assign_supervisor',
-    entityType: 'User',
-    entityId: student._id,
-    metadata: { supervisorId },
-  });
-
-  await Promise.all([
-    notify({
-      recipient: student,
-      type: 'assignment',
-      message: `You have been assigned to supervisor ${supervisor.fullName}.`,
-      link: '/student/supervisor',
-      emailSubject: 'Supervisor Assignment',
-      emailHtml: assignmentEmail({
-        studentName: student.fullName,
-        supervisorName: supervisor.fullName,
-        forStudent: true,
-      }),
-    }),
-    notify({
-      recipient: supervisor,
-      type: 'assignment',
-      message: `${student.fullName} has been assigned to you.`,
-      link: '/supervisor/students',
-      emailSubject: 'New Student Assigned',
-      emailHtml: assignmentEmail({
-        studentName: student.fullName,
-        supervisorName: supervisor.fullName,
-        forStudent: false,
-      }),
-    }),
-  ]);
-
-  res
-    .status(200)
-    .json(new ApiResponse(200, { user: student.toSafeObject() }, 'Supervisor assigned'));
 });
 
 // PATCH /api/me — any role updates own profile (FR-C4)
