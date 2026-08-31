@@ -4,10 +4,7 @@ import validate from '../middleware/validate.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import {
   createOrResubmit,
-  listSubmissions,
   getSubmission,
-  updateSubmission,
-  deleteSubmission,
   approveSubmission,
   requestChanges,
   addComment,
@@ -16,8 +13,6 @@ import {
 const router = Router();
 
 router.use(authenticate);
-
-router.get('/', authorize('admin', 'supervisor', 'student'), listSubmissions);
 
 // FR-T3, FR-T4
 router.post(
@@ -30,8 +25,6 @@ router.post(
 
 // FR-S4
 router.get('/:id', authorize('admin', 'supervisor', 'student'), getSubmission);
-router.patch('/:id', authorize('student', 'admin'), updateSubmission);
-router.delete('/:id', authorize('student', 'admin'), deleteSubmission);
 
 // FR-S5
 router.patch('/:id/approve', authorize('supervisor'), approveSubmission);

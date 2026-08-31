@@ -19,10 +19,9 @@ const userSchema = new Schema(
       required: true,
     },
     isActive: { type: Boolean, default: true },
-    // A user (student or supervisor) belongs to at most one Group. Group
-    // membership is the ONLY mechanism that links students and supervisors.
-    // There is no per-user "supervisor" pointer — every supervisor in a
-    // Group sees every student's work, and vice versa.
+    // Students only: the supervisor they are assigned to
+    supervisorId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    // Cohort / batch / room the user belongs to
     groupId: { type: Schema.Types.ObjectId, ref: 'Group', default: null },
     phone: { type: String, default: null },
     avatar: {
@@ -37,7 +36,8 @@ const userSchema = new Schema(
 );
 
 userSchema.index({ role: 1 });
-userSchema.index({ groupId: 1, role: 1 });
+userSchema.index({ supervisorId: 1 });
+userSchema.index({ groupId: 1 });
 
 userSchema.methods.toSafeObject = function () {
   const obj = this.toObject();

@@ -5,14 +5,8 @@ const { Schema } = mongoose;
 
 const milestoneSchema = new Schema(
   {
-    // The supervisor who published the milestone. Attribution only —
-    // authorization is now keyed on shared Group membership, not on
-    // being the original publisher.
     supervisorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    // The Group this milestone belongs to. REQUIRED: a milestone
-    // exists in exactly one Group's workspace, visible to all of that
-    // Group's members.
-    groupId: { type: Schema.Types.ObjectId, ref: 'Group', required: true },
+    groupId: { type: Schema.Types.ObjectId, ref: 'Group', default: null },
     title: { type: String, required: true, trim: true },
     description: { type: String, default: '' },
     order: { type: Number, default: 1 },
@@ -24,6 +18,6 @@ const milestoneSchema = new Schema(
 );
 
 milestoneSchema.index({ supervisorId: 1, order: 1 });
-milestoneSchema.index({ groupId: 1, order: 1 });
+milestoneSchema.index({ groupId: 1 });
 
 export default mongoose.model('Milestone', milestoneSchema);

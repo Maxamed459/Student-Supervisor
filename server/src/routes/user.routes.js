@@ -8,6 +8,7 @@ import {
   getUser,
   updateUser,
   deleteUser,
+  assignSupervisor,
 } from '../controllers/user.controller.js';
 
 const router = Router();
@@ -21,7 +22,6 @@ router.post(
   [
     body('fullName').notEmpty(),
     body('email').isEmail(),
-    body('password').isLength({ min: 8 }),
     body('role').isIn(['admin', 'supervisor', 'student']),
   ],
   validate,
@@ -34,5 +34,14 @@ router.get('/:id', authorize('admin'), getUser);
 // FR-A1, FR-A4
 router.patch('/:id', authorize('admin'), updateUser);
 router.delete('/:id', authorize('admin'), deleteUser);
+
+// FR-A3
+router.post(
+  '/:id/assign-supervisor',
+  authorize('admin'),
+  [body('supervisorId').notEmpty()],
+  validate,
+  assignSupervisor
+);
 
 export default router;

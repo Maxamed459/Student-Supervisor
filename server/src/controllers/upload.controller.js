@@ -8,7 +8,7 @@ export const getUploadSignature = asyncHandler(async (req, res) => {
   const { folder } = req.body;
   if (!folder) throw new ApiError(400, 'folder is required (e.g. "submissions", "milestones").');
 
-  const allowedFolders = ['submissions', 'milestones', 'avatars', 'guidelines'];
+  const allowedFolders = ['submissions', 'milestones', 'avatars'];
   if (!allowedFolders.includes(folder)) {
     throw new ApiError(400, `folder must be one of: ${allowedFolders.join(', ')}`);
   }

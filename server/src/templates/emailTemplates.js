@@ -79,25 +79,12 @@ export const reviewOutcomeEmail = ({ studentName, milestoneTitle, status, commen
     }${button(`${CLIENT_URL}/student/submissions`, 'View Feedback')}`
   );
 
-export const accountCreatedEmail = ({ fullName, email, password, role }) =>
+export const accountCreatedEmail = ({ fullName, email, tempPassword, role }) =>
   layout(
     'Your Account Has Been Created',
     `<p>Hi ${fullName},</p><p>An account has been created for you on the Student Supervisor System as a <strong>${role}</strong>.</p>
-     <p>Email: <strong>${email}</strong><br/>Password: <strong>${password}</strong></p>
-     <p>Please log in and change your password from your Profile page as soon as possible.</p>${button(`${CLIENT_URL}/login`, 'Log In Now')}`
-  );
-
-export const groupAssignmentEmail = ({ recipientName, groupName, role }) =>
-  layout(
-    'Added to a Group',
-    `<p>Hi ${recipientName},</p><p>You have been added to the group <strong>${groupName}</strong> as a <strong>${role}</strong>. This group is your shared workspace — ${
-      role === 'student'
-        ? 'you can now view guidelines published here and submit your work.'
-        : 'you can now publish guidelines and review submissions from the students in this group.'
-    }</p>${button(
-      `${CLIENT_URL}/${role === 'student' ? 'student/my-group' : 'supervisor/groups'}`,
-      'View Group'
-    )}`
+     <p>Email: <strong>${email}</strong><br/>Temporary Password: <strong>${tempPassword}</strong></p>
+     <p>Please log in and change your password immediately.</p>${button(`${CLIENT_URL}/login`, 'Log In Now')}`
   );
 
 export default {
@@ -107,5 +94,4 @@ export default {
   submissionReceivedEmail,
   reviewOutcomeEmail,
   accountCreatedEmail,
-  groupAssignmentEmail,
 };
