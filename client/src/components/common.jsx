@@ -6,8 +6,9 @@ import {
   MessageSquare,
   RefreshCw,
   Search,
+  AlertCircle,
 } from 'lucide-react';
-import { formatDate } from '../utils/format';
+import { formatDate, formatRelativeTime } from '../utils/format';
 import logoImg from '../assets/logo.jpeg';
 
 export function BrandMark({ compact = false, subtitle = null }) {
@@ -28,15 +29,16 @@ export function BrandMark({ compact = false, subtitle = null }) {
   );
 }
 
-export function Field({ help, icon: Icon, label: fieldLabel, children }) {
+export function Field({ help, icon: Icon, label: fieldLabel, error, children }) {
   return (
     <label className="field">
       <span>{fieldLabel}</span>
-      <div className={Icon ? 'input-shell has-icon' : 'input-shell'}>
+      <div className={`input-shell${Icon ? ' has-icon' : ''}${error ? ' has-error' : ''}`}>
         {Icon ? <Icon size={16} strokeWidth={2.1} /> : null}
         {children}
       </div>
-      {help ? <small>{help}</small> : null}
+      {error ? <small className="field-error"><AlertCircle size={13} />{error}</small> : null}
+      {!error && help ? <small>{help}</small> : null}
     </label>
   );
 }
@@ -113,8 +115,12 @@ export function DataTable({ columns, data, empty, loading }) {
   const currentPage = Math.min(page, pageCount);
   const pageRows = sorted.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  const emptyProps = typeof empty === 'object' && empty !== null
+    ? { icon: Search, ...empty }
+    : { icon: Search, text: empty || 'No records.' };
+
   if (loading) return <SkeletonTable columns={columns.length} />;
-  if (!data.length) return <TableState icon={Search} text={empty} />;
+  if (!data.length) return <TableState {...emptyProps} />;
 
   return (
     <div className="data-table">
@@ -188,11 +194,15 @@ export function SkeletonTable({ columns }) {
   );
 }
 
-export function TableState({ icon: Icon, text }) {
+export function TableState({ icon: Icon, text, title, actionLabel, onAction }) {
   return (
-    <div className="table-state">
-      <Icon size={18} />
+    <div className="table-state table-state-rich">
+      <div className="table-state-icon"><Icon size={22} /></div>
+      {title ? <strong>{title}</strong> : null}
       <span>{text}</span>
+      {onAction ? (
+        <button className="primary-button inline" onClick={onAction} type="button">{actionLabel}</button>
+      ) : null}
     </div>
   );
 }
@@ -220,20 +230,37 @@ export function StatusBars({ counts }) {
   );
 }
 
-export function ActivityFeed({ items = [] }) {
-  if (!items.length) return <TableState icon={MessageSquare} text="No recent activity returned by the API." />;
+export function ActivityFeed({ items = [], variant = 'notifications' }) {
+  if (!items.length) {
+    return (
+      <TableState
+        icon={MessageSquare}
+        title="No activity yet"
+        text={variant === 'audit' ? 'Audit records will appear here as users take actions in the system.' : 'No recent activity returned by the API.'}
+      />
+    );
+  }
   return (
     <div className="activity-list">
-      {items.slice(0, 6).map((item) => (
-        <article key={item._id || item.id} className="activity-item">
-          <i />
-          <div>
-            <strong>{item.title || item.action || item.type}</strong>
-            <p>{item.message || item.entityType || 'Activity record'}</p>
-            <span>{formatDate(item.createdAt)}</span>
-          </div>
-        </article>
-      ))}
+      {items.slice(0, 6).map((item) => {
+        const isAudit = variant === 'audit' || item.action;
+        const headline = isAudit
+          ? (item.action || item.entityType)
+          : (item.title || item.type);
+        const body = isAudit
+          ? `${item.entityType || 'Record'}${item.actorLabel ? ` · ${item.actorLabel}` : ''}`
+          : (item.message || item.entityType || 'Activity record');
+        return (
+          <article key={item._id || item.id} className="activity-item">
+            <i />
+            <div>
+              <strong>{headline}</strong>
+              <p>{body}</p>
+              <span>{formatRelativeTime(item.createdAt) || formatDate(item.createdAt)}</span>
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -248,7 +275,23 @@ export function RefreshButton({ queryKey }) {
 }
 
 export function MutationError({ mutation }) {
-  return mutation.error ? <p className="form-error" role="alert">{mutation.error.response?.data?.message || mutation.error.message}</p> : null;
+  if (!mutation.error) return null;
+  const data = mutation.error.response?.data;
+  const details = Array.isArray(data?.details) ? data.details : [];
+  return (
+    <div className="form-error-block" role="alert">
+      <p className="form-error">{data?.message || mutation.error.message}</p>
+      {details.length ? (
+        <ul className="form-error-list">
+          {details.map((item) => (
+            <li key={typeof item === 'string' ? item : `${item.field}-${item.message}`}>
+              {typeof item === 'string' ? item : item.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 export function FullPageState({ title }) {

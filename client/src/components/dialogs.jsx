@@ -1,12 +1,28 @@
-import { LockKeyhole, LogOut, Mail, ShieldCheck, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  LockKeyhole,
+  LogOut,
+  Mail,
+  ShieldCheck,
+  X,
+} from 'lucide-react';
+import { label } from '../utils/format';
 
-export function FormDialog({ open, title, subtitle, icon: Icon, onClose, children }) {
+export function FormDialog({ open, title, subtitle, icon: Icon, onClose, children, panelClassName = '' }) {
   if (!open) return null;
+  const isGroupPanel = panelClassName.includes('modal-panel--group');
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="modal-panel"
-        style={{ width: 'min(100%, 560px)', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto' }}
+        className={`modal-panel ${panelClassName}`.trim()}
+        style={{
+          width: isGroupPanel ? 'min(100%, 720px)' : 'min(100%, 560px)',
+          maxHeight: 'calc(100vh - 48px)',
+          overflowY: isGroupPanel ? 'visible' : 'auto',
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby="form-dialog-title"
@@ -72,17 +88,171 @@ export function ForgotPasswordDialog({ open, onClose }) {
   );
 }
 
-export function ConfirmDialog({ open, title, description, confirmLabel, onCancel, onConfirm }) {
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  destructive = false,
+  onCancel,
+  onConfirm,
+}) {
   if (!open) return null;
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onCancel}>
       <section className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-icon"><LogOut size={20} /></div>
+        <div className={`modal-icon${destructive ? ' modal-icon-danger' : ''}`}>
+          {destructive ? <AlertTriangle size={20} /> : <LogOut size={20} />}
+        </div>
         <h2 id="confirm-title">{title}</h2>
         <p>{description}</p>
         <div className="modal-actions">
           <button className="secondary-button" onClick={onCancel} type="button">Cancel</button>
-          <button className="primary-button inline" onClick={onConfirm} type="button">{confirmLabel}</button>
+          <button
+            className={destructive ? 'primary-button inline danger-button-solid' : 'primary-button inline'}
+            onClick={onConfirm}
+            type="button"
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function RequestChangesDialog({
+  open,
+  submission,
+  onClose,
+  onConfirm,
+  pending = false,
+}) {
+  const [feedback, setFeedback] = useState('');
+  const [error, setError] = useState('');
+  const textareaRef = useRef(null);
+  const maxLength = 2000;
+
+  useEffect(() => {
+    if (open) {
+      setFeedback('');
+      setError('');
+      window.setTimeout(() => textareaRef.current?.focus(), 80);
+    }
+  }, [open]);
+
+  if (!open || !submission) return null;
+
+  const title = label(submission.milestone || submission.milestoneId || submission);
+  const studentName = label(submission.student || submission.studentId);
+  const groupName = label(submission.group || submission.student?.group);
+  const version = submission.currentVersion || submission.versions?.length || 1;
+
+  const submit = () => {
+    const clean = feedback.trim();
+    if (!clean) {
+      setError('Feedback is required so the student knows what to revise.');
+      return;
+    }
+    onConfirm(clean);
+  };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={pending ? undefined : onClose}>
+      <section
+        className="modal-panel review-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="request-changes-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-icon modal-icon-danger"><AlertTriangle size={20} /></div>
+        <h2 id="request-changes-title">Request changes</h2>
+        <p>Send clear revision guidance back to the student.</p>
+        <dl className="review-dialog-meta">
+          <div><dt>Submission</dt><dd>{title}</dd></div>
+          <div><dt>Student</dt><dd>{studentName}</dd></div>
+          {groupName !== 'Not assigned' ? <div><dt>Group</dt><dd>{groupName}</dd></div> : null}
+          <div><dt>Version</dt><dd>v{version}</dd></div>
+        </dl>
+        <label className="field">
+          <span>Revision feedback</span>
+          <div className={`input-shell${error ? ' has-error' : ''}`}>
+            <textarea
+              ref={textareaRef}
+              rows={6}
+              value={feedback}
+              maxLength={maxLength}
+              placeholder="Clearly explain what needs to be revised or improved..."
+              onChange={(event) => {
+                setFeedback(event.target.value);
+                if (error) setError('');
+              }}
+            />
+          </div>
+          {error ? <small className="field-error"><AlertTriangle size={13} />{error}</small> : null}
+          <small className="char-count">{feedback.length}/{maxLength}</small>
+        </label>
+        <div className="modal-actions">
+          <button className="secondary-button" disabled={pending} onClick={onClose} type="button">Cancel</button>
+          <button className="primary-button inline danger-button-solid" disabled={pending} onClick={submit} type="button">
+            {pending ? <><Loader2 className="spin" size={15} />Sending…</> : 'Request changes'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function ApproveSubmissionDialog({
+  open,
+  submission,
+  onClose,
+  onConfirm,
+  pending = false,
+}) {
+  const [feedback, setFeedback] = useState('');
+
+  useEffect(() => {
+    if (open) setFeedback('');
+  }, [open]);
+
+  if (!open || !submission) return null;
+
+  const title = label(submission.milestone || submission.milestoneId || submission);
+  const studentName = label(submission.student || submission.studentId);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={pending ? undefined : onClose}>
+      <section
+        className="modal-panel review-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="approve-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="modal-icon"><CheckCircle2 size={20} /></div>
+        <h2 id="approve-title">Approve submission?</h2>
+        <p>
+          Confirm approval for <strong>{title}</strong> submitted by <strong>{studentName}</strong>.
+          You can optionally leave a note for the student.
+        </p>
+        <label className="field">
+          <span>Optional feedback</span>
+          <div className="input-shell">
+            <textarea
+              rows={4}
+              value={feedback}
+              placeholder="Add an optional approval note..."
+              onChange={(event) => setFeedback(event.target.value)}
+            />
+          </div>
+        </label>
+        <div className="modal-actions">
+          <button className="secondary-button" disabled={pending} onClick={onClose} type="button">Cancel</button>
+          <button className="primary-button inline" disabled={pending} onClick={() => onConfirm(feedback.trim())} type="button">
+            {pending ? <><Loader2 className="spin" size={15} />Approving…</> : 'Approve submission'}
+          </button>
         </div>
       </section>
     </div>

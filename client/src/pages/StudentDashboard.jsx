@@ -823,7 +823,7 @@ function StudentDashboard() {
               type="button"
               className="ef-bell"
               aria-label="Notifications"
-              onClick={() => setTab("documents")}
+              onClick={() => navigate("/student/notifications")}
             >
               <IconBell size={18} />
               {pendingDocs.length > 0 && <span className="ef-bell-dot" />}

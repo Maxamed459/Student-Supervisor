@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
 import { Bell, LogOut, Menu } from 'lucide-react';
-import { fetchMe, logoutRequest, tokenStore } from '../services/apiClient';
+import { fetchMe, fetchNotificationMeta, logoutRequest, tokenStore } from '../services/apiClient';
 import { roleRoutes, isSupportedRole } from '../config/navigation';
 import { ConfirmDialog } from '../components/dialogs';
 import { FullPageState } from '../components/common';
@@ -38,7 +39,13 @@ export function ProtectedLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
-
+  const notificationsMeta = useQuery({
+    queryKey: ['notifications', 'meta'],
+    queryFn: fetchNotificationMeta,
+    enabled: Boolean(token),
+    refetchInterval: 60_000,
+  });
+  const unreadCount = notificationsMeta.data?.unreadCount ?? 0;
 
   useEffect(() => {
     if (!token) return;
@@ -93,8 +100,17 @@ export function ProtectedLayout() {
             <h1>{currentTitle}</h1>
           </div>
           <div className="topbar-actions">
-            <Link className="icon-button" to={`/${user.role}/notifications`} title="Notifications">
+            <Link
+              className={`icon-button notification-link${unreadCount > 0 ? ' has-unread' : ''}`}
+              to={`/${user.role}/notifications`}
+              title={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
+            >
               <Bell size={18} />
+              {unreadCount > 0 ? (
+                <span className="notification-badge" aria-label={`${unreadCount} unread notifications`}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              ) : null}
             </Link>
             <Link className="avatar" to={`/${user.role}/profile`} title="Profile">
               {user.fullName?.slice(0, 1) || 'U'}
@@ -121,6 +137,7 @@ export function ProtectedLayout() {
               <Route path="/admin/groups" element={<GroupsScreen allowManage />} />
               <Route path="/admin/groups/:id" element={<GroupWorkspaceScreen role="admin" />} />
               <Route path="/admin/audit-logs" element={<AuditLogsScreen />} />
+              <Route path="/admin/notifications" element={<NotificationsScreen />} />
               <Route path="/admin/profile" element={<ProfileScreen />} />
 
               <Route path="/supervisor/dashboard" element={<Dashboard role="supervisor" />} />

@@ -15,6 +15,7 @@ export const roleRoutes = {
     ['Users', '/admin/users', Users],
     ['Groups', '/admin/groups', BookOpen],
     ['Audit Logs', '/admin/audit-logs', ShieldCheck],
+    ['Notifications', '/admin/notifications', Bell],
     ['Profile', '/admin/profile', UserCog],
   ],
   supervisor: [

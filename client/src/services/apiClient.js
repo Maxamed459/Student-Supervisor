@@ -18,7 +18,7 @@ const normalizeGroup = (group) => {
   if (!group) return group;
   return {
     ...group,
-    code: group.code || group.term || group.name,
+    code: group.code || group.term || '',
     supervisors: group.supervisors || [],
     supervisor:
       group.supervisor ||
@@ -64,6 +64,21 @@ const normalizeNotification = (notification) => {
   };
 };
 
+const normalizeAuditLog = (item) => {
+  if (!item) return item;
+  const actorSource = item.userId && typeof item.userId === 'object'
+    ? item.userId
+    : item.actor;
+  const actor = actorSource && typeof actorSource === 'object'
+    ? normalizeUser(actorSource)
+    : null;
+  return {
+    ...item,
+    actor,
+    actorLabel: actor?.fullName || actor?.email || (typeof actorSource === 'string' ? actorSource : 'System'),
+  };
+};
+
 const normalizers = {
   user: normalizeUser,
   users: (items = []) => items.map(normalizeUser),
@@ -75,11 +90,38 @@ const normalizers = {
   submissions: (items = []) => items.map(normalizeSubmission),
   notification: normalizeNotification,
   notifications: (items = []) => items.map(normalizeNotification),
+  auditLog: normalizeAuditLog,
+  auditLogs: (items = []) => items.map(normalizeAuditLog),
 };
 
 const normalizeByKey = (key, value) => normalizers[key]?.(value) ?? value;
 
+const normalizeMemberIds = (values = []) => [...new Set(
+  (values || [])
+    .map((value) => {
+      if (!value) return null;
+      if (typeof value === 'string') return value.trim();
+      if (typeof value === 'object') return value._id || value.id || null;
+      return String(value);
+    })
+    .filter(Boolean),
+)];
+
+const toGroupPayload = (payload = {}) => ({
+  name: String(payload.name || '').trim(),
+  code: payload.code?.trim() || null,
+  description: payload.description?.trim() || '',
+  term: payload.term?.trim() || null,
+  supervisors: normalizeMemberIds(payload.supervisors).slice(0, 1),
+  students: normalizeMemberIds(payload.students),
+  ...(payload.isActive !== undefined ? { isActive: payload.isActive } : {}),
+});
+
 const toApiPayload = (path, payload = {}) => {
+  if (path === '/groups' || /^\/groups\/[^/]+$/.test(path)) {
+    return toGroupPayload(payload);
+  }
+
   if (path === '/milestones') {
     const { group, dueAt, status, ...rest } = payload;
     return {
@@ -239,8 +281,26 @@ export async function changePasswordRequest(payload) {
 
 export async function listResource(path, key) {
   const data = unwrapResponse(await api.get(path));
-  const value = key === 'progress' && !data[key] ? data.items : data[key];
+  let value;
+  if (key === 'auditLogs') {
+    value = data.auditLogs || data.logs || [];
+  } else if (key === 'notifications') {
+    value = data.notifications || data[key] || [];
+  } else {
+    value = key === 'progress' && !data[key] ? data.items : data[key];
+  }
   return normalizeByKey(key, value || []);
+}
+
+export async function fetchNotificationMeta() {
+  const data = unwrapResponse(await api.get('/notifications'));
+  const notifications = data.notifications || [];
+  return {
+    notifications: normalizers.notifications(notifications),
+    unreadCount: typeof data.unreadCount === 'number'
+      ? data.unreadCount
+      : notifications.filter((item) => !item.isRead).length,
+  };
 }
 
 export async function createResource(path, payload, key) {

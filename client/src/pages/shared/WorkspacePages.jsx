@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
+  Bell,
   BookOpen,
   CheckCircle2,
   ClipboardList,
@@ -31,98 +32,143 @@ import {
 } from '../../services/apiClient';
 import { useResource, useDashboardData, useGroupDetail } from '../../hooks/useResources';
 import { useToast } from '../../context/useToast';
-import { formatDate, label, countBy, getFileCategory } from '../../utils/format';
+import { formatDate, label, getFileCategory, formatRelativeTime, formatAuditAction, auditActionBadgeValue } from '../../utils/format';
+import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import {
+  hasValidationErrors,
+  validatePassword,
+  validateRequired,
+} from '../../utils/validation';
 import { logout, setSession } from '../../store/slices/authSlice';
 import {
-  ActivityFeed,
   Badge,
   Card,
   DataTable,
   Field,
   FullPageState,
-  MetricCard,
   MutationError,
   PageIntro,
   RefreshButton,
-  StatusBars,
   TableState,
 } from '../../components/common';
 import { FormDialog } from '../../components/dialogs';
-import { PendingActions, SummaryTile } from '../../components/dashboard';
+import { DashboardHeader, DashboardStatCard, DashboardCTACard, DashboardActivityChart, countCreatedToday } from '../../components/dashboard';
 import { GroupForm, GuidelineForm, MilestoneForm, SubmissionForm, UserForm } from '../../components/forms';
 import { FeedbackReplyForm, FileViewerDialog, ReviewControls, SubmissionFiles } from '../../components/submission';
 
 // ----------------------- Dashboard -----------------------
 
 export function Dashboard({ role }) {
+  const user = useSelector((state) => state.auth.user);
   const data = useDashboardData(role);
   const submissions = data.submissions.data || [];
   const groups = data.groups.data || [];
   const milestones = data.milestones.data || [];
   const students = data.students.data || [];
-  const supervisors = data.supervisors.data || [];
-  const notifications = data.notifications.data || [];
-  const myGroup = role === 'student' ? groups[0] : null;
-  const currentMilestone = role === 'student'
-    ? milestones.find((item) => item.status === 'published' || item.isPublished) || milestones[0]
-    : null;
-  const latestSubmission = role === 'student' ? submissions[0] : null;
   const pendingReviews = submissions.filter((item) => item.status === 'pending');
 
-  const statusCounts = countBy(submissions, 'status');
-  const metrics = role === 'admin'
+  const todaySubmissions = countCreatedToday(submissions);
+  const todayMilestones = countCreatedToday(milestones);
+
+  const welcomeName = user?.fullName?.split(' ')[0] || 'there';
+  const subtitle = `Welcome back, ${welcomeName}. Have a look at any recent changes to your supervision workspace.`;
+
+  const statCards = role === 'admin'
     ? [
-        ['TOTAL STUDENTS', students.length, 'Registered student accounts', GraduationCap],
-        ['TOTAL SUPERVISORS', supervisors.length, 'Active supervisor accounts', UserCog],
-        ['STUDENT GROUPS', groups.length, 'Groups in the database', Users],
+        {
+          key: 'groups',
+          label: 'Groups',
+          value: groups.length,
+          delta: todayMilestones ? `+${todayMilestones} today` : null,
+          linkTo: '/admin/groups',
+          tone: 'blue',
+        },
+        {
+          key: 'students',
+          label: 'Students',
+          value: students.length,
+          delta: todaySubmissions ? `+${todaySubmissions} today` : null,
+          linkTo: '/admin/users',
+          tone: 'green',
+        },
       ]
     : role === 'supervisor'
       ? [
-          ['MY STUDENTS', students.length, 'Students in your group(s)', GraduationCap],
-          ['MY GROUPS', groups.length, 'Groups you supervise', BookOpen],
-          ['PENDING REVIEWS', pendingReviews.length, 'Submissions awaiting decision', FileText],
+          {
+            key: 'groups',
+            label: 'My Groups',
+            value: groups.length,
+            linkTo: '/supervisor/groups',
+            tone: 'blue',
+          },
+          {
+            key: 'reviews',
+            label: 'Pending Reviews',
+            value: pendingReviews.length,
+            delta: pendingReviews.length ? `${pendingReviews.length} awaiting` : null,
+            linkTo: '/supervisor/groups',
+            tone: 'green',
+          },
         ]
       : [
-          ['MILESTONES', milestones.length, 'Published milestones for your group', ClipboardList],
-          ['SUBMISSIONS', submissions.length, 'Your uploaded versions', FileText],
-          ['GROUP', myGroup ? label(myGroup) : 'No group', myGroup?.code || 'You will be assigned to a group by an admin', Users],
+          {
+            key: 'milestones',
+            label: 'Milestones',
+            value: milestones.length,
+            linkTo: '/student/groups',
+            tone: 'blue',
+          },
+          {
+            key: 'submissions',
+            label: 'Submissions',
+            value: submissions.length,
+            delta: todaySubmissions ? `+${todaySubmissions} today` : null,
+            linkTo: '/student/groups',
+            tone: 'green',
+          },
         ];
 
+  const cta = role === 'admin'
+    ? {
+        text: 'Create groups, assign supervisors, and manage student accounts from a single workspace.',
+        actionLabel: 'Manage groups',
+        actionTo: '/admin/groups',
+      }
+    : role === 'supervisor'
+      ? {
+          text: 'Review student submissions, publish milestones, and share guidelines with your group.',
+          actionLabel: 'Open workspace',
+          actionTo: groups[0]?._id ? `/supervisor/groups/${groups[0]._id}` : '/supervisor/groups',
+        }
+      : {
+          text: 'Submit your deliverables against published milestones and track supervisor feedback.',
+          actionLabel: 'Go to my group',
+          actionTo: '/student/groups',
+        };
+
   return (
-    <section className="page-stack">
-      <PageIntro title="Overview" subtitle="Current metrics for the academic term." />
-      <div className="metric-grid">
-        {metrics.map(([title, value, caption, Icon]) => <MetricCard caption={caption} icon={Icon} key={title} title={title} value={value} />)}
+    <section className="page-stack dashboard-page">
+      <DashboardHeader subtitle={subtitle} />
+
+      <div className="dash-stat-grid">
+        {statCards.map((card) => (
+          <DashboardStatCard
+            key={card.key}
+            delta={card.delta}
+            label={card.label}
+            linkTo={card.linkTo}
+            tone={card.tone}
+            value={card.value}
+          />
+        ))}
+        <DashboardCTACard
+          actionLabel={cta.actionLabel}
+          actionTo={cta.actionTo}
+          text={cta.text}
+        />
       </div>
-      {role === 'student' ? (
-        <Card title="My Supervision Summary">
-          <div className="student-summary-grid">
-            <SummaryTile title="Group" value={label(myGroup)} caption={myGroup?.code || 'No active group returned'} />
-            <SummaryTile
-              title="Supervisor"
-              value={myGroup?.supervisors?.length > 1
-                ? `${myGroup.supervisors.length} supervisors`
-                : label(myGroup?.supervisor)}
-              caption={myGroup?.supervisors?.length > 1
-                ? 'Multiple supervisors share your group'
-                : 'Assigned through your group'}
-            />
-            <SummaryTile title="Current Milestone" value={label(currentMilestone)} caption={currentMilestone?.dueAt ? `Due ${formatDate(currentMilestone.dueAt)}` : 'No due date returned'} />
-            <SummaryTile title="Submission Status" value={latestSubmission?.status || 'Not submitted'} caption={latestSubmission ? `Version ${latestSubmission.currentVersion}` : 'No submission returned'} />
-          </div>
-        </Card>
-      ) : null}
-      <div className="dashboard-grid">
-        <Card title="Submission Status Distribution" className="span-2">
-          <StatusBars counts={statusCounts} />
-        </Card>
-        <Card title={role === 'admin' ? 'Recent System Activity' : 'Recent Notifications'}>
-          <ActivityFeed items={role === 'admin' ? data.auditLogs.data : notifications} />
-        </Card>
-      </div>
-      <Card title="Pending Actions">
-        <PendingActions reviews={pendingReviews} milestones={milestones} role={role} />
-      </Card>
+
+      <DashboardActivityChart submissions={submissions} />
     </section>
   );
 }
@@ -139,6 +185,7 @@ export function UsersScreen({ allowCreate = false, title = 'Users' }) {
   const [editing, setEditing] = useState(null);
   const [roleFilter, setRoleFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   const createMutation = useMutation({
     mutationFn: (payload) => createResource('/users', payload, 'user'),
@@ -304,8 +351,13 @@ export function UsersScreen({ allowCreate = false, title = 'Users' }) {
                 </button>
                 <button
                   className="small-button danger"
-                  onClick={() => {
-                    if (window.confirm(`Delete ${item.fullName}?`)) deleteMutation.mutate(item._id);
+                  onClick={async () => {
+                    if (await askConfirm({
+                      title: `Delete ${item.fullName}?`,
+                      description: 'This account will be permanently removed from the system.',
+                      confirmLabel: 'Delete user',
+                      destructive: true,
+                    })) deleteMutation.mutate(item._id);
                   }}
                   type="button"
                 >
@@ -317,8 +369,13 @@ export function UsersScreen({ allowCreate = false, title = 'Users' }) {
           data={filteredUsers}
           empty={
             roleFilter || groupFilter
-              ? 'No users match the current filters.'
-              : 'No users returned by the API.'
+              ? { icon: Users, title: 'No matches', text: 'No users match the current filters. Try adjusting your role or group filter.' }
+              : {
+                  icon: Users,
+                  title: 'No users yet',
+                  text: 'Create student, supervisor, and administrator accounts to get started.',
+                  ...(allowCreate ? { actionLabel: 'Add user', onAction: () => { setEditing(null); setCreateOpen(true); } } : {}),
+                }
           }
           loading={users.isLoading}
         />
@@ -329,6 +386,7 @@ export function UsersScreen({ allowCreate = false, title = 'Users' }) {
           onClose={() => setCreatedAccount(null)}
         />
       ) : null}
+      {confirmDialog}
     </section>
   );
 }
@@ -410,10 +468,9 @@ export function GroupsScreen({ allowManage = false }) {
   const users = useResource('users', allowManage);
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [selectedGroup, setSelectedGroup] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
-  const [memberSearch, setMemberSearch] = useState('');
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   const groupMutation = useMutation({
     mutationFn: (payload) => createResource('/groups', payload, 'group'),
@@ -437,45 +494,10 @@ export function GroupsScreen({ allowManage = false }) {
     mutationFn: (id) => deleteResource(`/groups/${id}`),
     onSuccess: () => {
       toast.success('Group deleted');
-      setSelectedGroup((current) => (current === editingGroup?._id ? null : current));
       queryClient.invalidateQueries();
     },
     onError: (error) => toast.error(error.response?.data?.message || error.message),
   });
-  const addMemberMutation = useMutation({
-    mutationFn: ({ groupId, userId }) => createResource(`/groups/${groupId}/members`, { userId }),
-    onSuccess: () => {
-      toast.success('Member added to the group');
-      queryClient.invalidateQueries();
-    },
-    onError: (error) => toast.error(error.response?.data?.message || error.message),
-  });
-  const removeMemberMutation = useMutation({
-    mutationFn: ({ groupId, userId }) => deleteResource(`/groups/${groupId}/members/${userId}`),
-    onSuccess: () => {
-      toast.success('Member removed from the group');
-      queryClient.invalidateQueries();
-    },
-    onError: (error) => toast.error(error.response?.data?.message || error.message),
-  });
-
-  const currentGroup = useMemo(() => {
-    if (!selectedGroup) return null;
-    return (groups.data || []).find((g) => g._id === selectedGroup) || null;
-  }, [groups.data, selectedGroup]);
-
-  const memberCandidates = useMemo(() => {
-    if (!currentGroup || !users.data) return [];
-    const term = memberSearch.trim().toLowerCase();
-    return users.data
-      .filter((u) => u.role === 'student' || u.role === 'supervisor')
-      .filter((u) => {
-        if (term && !`${u.fullName} ${u.email}`.toLowerCase().includes(term)) return false;
-        const alreadyMember = (currentGroup.students || []).some((s) => s._id === u._id)
-          || (currentGroup.supervisors || []).some((s) => s._id === u._id);
-        return !alreadyMember;
-      });
-  }, [currentGroup, memberSearch, users.data]);
 
   return (
     <section className="page-stack">
@@ -486,6 +508,7 @@ export function GroupsScreen({ allowManage = false }) {
         title="Create group"
         subtitle="Set up a new student-supervisor group workspace."
         icon={BookOpen}
+        panelClassName="modal-panel--group"
       >
         <GroupForm
           users={users.data || []}
@@ -500,9 +523,11 @@ export function GroupsScreen({ allowManage = false }) {
         title={editingGroup ? `Edit ${editingGroup.name}` : 'Edit group'}
         subtitle="Update group name, code, description, and supervisor assignments."
         icon={BookOpen}
+        panelClassName="modal-panel--group"
       >
         {editingGroup ? (
           <GroupForm
+            key={editingGroup._id}
             initial={editingGroup}
             users={users.data || []}
             onSubmit={(payload) => updateGroupMutation.mutate({ id: editingGroup._id, payload })}
@@ -546,7 +571,7 @@ export function GroupsScreen({ allowManage = false }) {
               : 'No supervisor'],
             ['Students', (item) => `${item.studentCount ?? item.students?.length ?? 0}`],
             ['Workspace', (item) => (
-              <GroupWorkspaceLink groupId={item._id} onManage={allowManage ? setSelectedGroup : null} currentSelected={currentGroup?._id} />
+              <GroupWorkspaceLink groupId={item._id} />
             )],
             allowManage ? ['Actions', (item) => (
               <div className="row-actions">
@@ -562,8 +587,13 @@ export function GroupsScreen({ allowManage = false }) {
                 </button>
                 <button
                   className="small-button danger"
-                  onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete the group "${item.name}"? Assigned students and supervisors will be detached.`)) {
+                  onClick={async () => {
+                    if (await askConfirm({
+                      title: `Delete group "${item.name}"?`,
+                      description: 'Assigned students and supervisors will be detached from this group.',
+                      confirmLabel: 'Delete group',
+                      destructive: true,
+                    })) {
                       deleteGroupMutation.mutate(item._id);
                     }
                   }}
@@ -575,98 +605,21 @@ export function GroupsScreen({ allowManage = false }) {
             )] : null,
           ].filter(Boolean)}
           data={groups.data || []}
-          empty="No groups returned by the API."
+          empty={
+            allowManage
+              ? {
+                  icon: BookOpen,
+                  title: 'No groups yet',
+                  text: 'Groups connect students and supervisors in a shared workspace.',
+                  actionLabel: 'Create group',
+                  onAction: () => { setEditingGroup(null); setCreateOpen(true); },
+                }
+              : { icon: BookOpen, title: 'No groups', text: 'You are not assigned to any group yet.' }
+          }
           loading={groups.isLoading}
         />
       </Card>
-      {currentGroup ? (
-        <Card title={`Members of ${currentGroup.code || currentGroup.name}`}>
-          <div className="group-membership">
-            <div>
-              <h4>Supervisors</h4>
-              <ul className="member-list">
-                {(currentGroup.supervisors || []).length === 0 ? (
-                  <li className="muted">No supervisors yet.</li>
-                ) : (
-                  currentGroup.supervisors.map((sup) => (
-                    <li key={sup._id} className="member-row">
-                      <span><UserCog size={14} /></span>
-                      <div><strong>{sup.fullName}</strong><p>{sup.email}</p></div>
-                      {allowManage ? (
-                        <button
-                          className="icon-button compact"
-                          onClick={() => removeMemberMutation.mutate({ groupId: currentGroup._id, userId: sup._id })}
-                          type="button"
-                          aria-label={`Remove ${sup.fullName} from the group`}
-                        >
-                          <X size={14} />
-                        </button>
-                      ) : null}
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-            <div>
-              <h4>Students</h4>
-              <ul className="member-list">
-                {(currentGroup.students || []).length === 0 ? (
-                  <li className="muted">No students yet.</li>
-                ) : (
-                  currentGroup.students.map((stu) => (
-                    <li key={stu._id} className="member-row">
-                      <span><Users size={14} /></span>
-                      <div><strong>{stu.fullName}</strong><p>{stu.email}</p></div>
-                      {allowManage ? (
-                        <button
-                          className="icon-button compact"
-                          onClick={() => removeMemberMutation.mutate({ groupId: currentGroup._id, userId: stu._id })}
-                          type="button"
-                          aria-label={`Remove ${stu.fullName} from the group`}
-                        >
-                          <X size={14} />
-                        </button>
-                      ) : null}
-                    </li>
-                  ))
-                )}
-              </ul>
-            </div>
-            {allowManage ? (
-              <div className="add-member">
-                <h4>Add a member</h4>
-                <input
-                  onChange={(event) => setMemberSearch(event.target.value)}
-                  placeholder="Search by name or email"
-                  value={memberSearch}
-                />
-                <ul className="member-list">
-                  {memberCandidates.length === 0 ? (
-                    <li className="muted">No matching members available.</li>
-                  ) : (
-                    memberCandidates.slice(0, 12).map((candidate) => (
-                      <li className="member-row" key={candidate._id}>
-                        <span><UserCog size={14} /></span>
-                        <div>
-                          <strong>{candidate.fullName}</strong>
-                          <p>{candidate.email} <Badge value={candidate.role} /></p>
-                        </div>
-                        <button
-                          className="small-button"
-                          onClick={() => addMemberMutation.mutate({ groupId: currentGroup._id, userId: candidate._id })}
-                          type="button"
-                        >
-                          Add
-                        </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-        </Card>
-      ) : null}
+      {confirmDialog}
     </section>
   );
 }
@@ -757,6 +710,7 @@ export function MilestonesScreen({
   const [activeGroupId, setActiveGroupId] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState(null);
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   const mutation = useMutation({
     mutationFn: (payload) => createResource('/milestones', payload, 'milestone'),
@@ -893,8 +847,13 @@ export function MilestonesScreen({
                 </button>
                 <button
                   className="small-button danger"
-                  onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete milestone "${item.title}"?`)) {
+                  onClick={async () => {
+                    if (await askConfirm({
+                      title: `Delete milestone "${item.title}"?`,
+                      description: 'Students will no longer see this milestone in their workspace.',
+                      confirmLabel: 'Delete milestone',
+                      destructive: true,
+                    })) {
                       deleteMutation.mutate(item._id);
                     }
                   }}
@@ -906,10 +865,22 @@ export function MilestonesScreen({
             )] : null,
           ].filter(Boolean)}
           data={visibleMilestones}
-          empty={scopedGroupId ? 'No milestones in this group yet.' : 'No milestones returned by the API.'}
+          empty={
+            scopedGroupId
+              ? {
+                  icon: ClipboardList,
+                  title: 'No milestones yet',
+                  text: allowManage
+                    ? 'Publish a milestone to set deliverables and due dates for this group.'
+                    : 'Your supervisor has not published any milestones for this group yet.',
+                  ...(allowManage ? { actionLabel: 'Publish milestone', onAction: () => setCreateOpen(true) } : {}),
+                }
+              : { icon: ClipboardList, title: 'No milestones', text: 'Select a group to view its milestones.' }
+          }
           loading={milestones.isLoading}
         />
       </Card>
+      {confirmDialog}
     </section>
   );
 }
@@ -929,6 +900,7 @@ export function SubmissionsScreen({ allowCreate = false, allowReview = false, sc
   const [activeGroupId, setActiveGroupId] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSubmission, setEditingSubmission] = useState(null);
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   const visibleGroups = useMemo(() => (groups.data || []).filter(Boolean), [groups.data]);
   const scopedGroupId = activeGroupId
@@ -1086,8 +1058,13 @@ export function SubmissionsScreen({ allowCreate = false, allowReview = false, sc
                 ) : null}
                 <button
                   className="small-button danger"
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to delete this submission?')) {
+                  onClick={async () => {
+                    if (await askConfirm({
+                      title: 'Delete this submission?',
+                      description: 'Uploaded files and review history for this submission will be removed.',
+                      confirmLabel: 'Delete submission',
+                      destructive: true,
+                    })) {
                       deleteSubmissionMutation.mutate(item._id);
                     }
                   }}
@@ -1099,10 +1076,22 @@ export function SubmissionsScreen({ allowCreate = false, allowReview = false, sc
             )] : null,
           ].filter(Boolean)}
           data={visibleSubmissions}
-          empty={scopedGroupId ? 'No submissions in this group yet.' : 'No submissions returned by the API.'}
+          empty={
+            scopedGroupId
+              ? {
+                  icon: FileText,
+                  title: 'No submissions yet',
+                  text: allowCreate
+                    ? 'Upload your project files against a published milestone to begin the review cycle.'
+                    : 'No student submissions have been recorded for this group yet.',
+                  ...(allowCreate ? { actionLabel: 'Submit work', onAction: () => setCreateOpen(true) } : {}),
+                }
+              : { icon: FileText, title: 'No submissions', text: 'Select a group to view submission history.' }
+          }
           loading={submissions.isLoading}
         />
       </Card>
+      {confirmDialog}
     </section>
   );
 }
@@ -1155,7 +1144,11 @@ export function NotificationsScreen() {
             ['Action', (item) => item.readAt ? 'Done' : <button className="small-button" onClick={() => mutation.mutate(item._id)} type="button">Mark read</button>],
           ]}
           data={notifications.data || []}
-          empty="No notifications returned by the API."
+          empty={{
+            icon: Bell,
+            title: 'All caught up',
+            text: 'You have no notifications right now. Updates about milestones, reviews, and submissions will appear here.',
+          }}
           loading={notifications.isLoading}
         />
       </Card>
@@ -1167,19 +1160,44 @@ export function NotificationsScreen() {
 
 export function AuditLogsScreen() {
   const auditLogs = useResource('auditLogs', true);
+
+  const formatDetails = (item) => {
+    const parts = [];
+    if (item.entityId) parts.push(`Target: ${item.entityId}`);
+    if (item.metadata?.ipAddress) parts.push(`IP: ${item.metadata.ipAddress}`);
+    if (item.metadata?.fields) parts.push(`Fields: ${Object.keys(item.metadata.fields).join(', ')}`);
+    if (item.metadata?.note) parts.push(item.metadata.note);
+    return parts.length ? parts.join(' · ') : '—';
+  };
+
   return (
     <section className="page-stack">
       <PageIntro title="Audit logs" subtitle="Recent backend audit records." />
       <Card title="System activity">
         <DataTable
           columns={[
-            ['Action', (item) => item.action],
-            ['Entity', (item) => item.entityType],
-            ['Actor', (item) => label(item.actor)],
-            ['Created', (item) => formatDate(item.createdAt)],
+            ['Action', (item) => <Badge value={auditActionBadgeValue(item.action)} />],
+            ['Entity type', (item) => item.entityType || '—'],
+            ['Actor', (item) => (
+              <div className="audit-actor-cell">
+                <strong>{item.actor?.fullName || item.actorLabel || 'System'}</strong>
+                {item.actor?.email ? <small>{item.actor.email}</small> : null}
+              </div>
+            )],
+            ['Timestamp', (item) => (
+              <div className="audit-time-cell">
+                <strong>{formatRelativeTime(item.createdAt)}</strong>
+                <small>{formatDate(item.createdAt)}</small>
+              </div>
+            )],
+            ['Details', (item) => formatDetails(item)],
           ]}
           data={auditLogs.data || []}
-          empty="No audit logs returned by the API."
+          empty={{
+            icon: ClipboardList,
+            title: 'No activity recorded',
+            text: 'Audit records will appear here as users create, update, or delete resources in the system.',
+          }}
           loading={auditLogs.isLoading}
         />
       </Card>
@@ -1197,6 +1215,8 @@ export function ProfileScreen() {
   const toast = useToast();
   const [form, setForm] = useState({ fullName: user.fullName || '', phone: user.phone || '' });
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileErrors, setProfileErrors] = useState({});
+  const [passwordErrors, setPasswordErrors] = useState({});
 
   const updateMutation = useMutation({
     mutationFn: updateMe,
@@ -1220,13 +1240,27 @@ export function ProfileScreen() {
 
   const submitProfile = (event) => {
     event.preventDefault();
+    const nextErrors = { fullName: validateRequired(form.fullName, 'Full name') };
+    setProfileErrors(nextErrors);
+    if (hasValidationErrors(nextErrors)) {
+      toast.error('Please fill in all required fields correctly.');
+      return;
+    }
     updateMutation.mutate({ fullName: form.fullName, phone: form.phone });
   };
 
   const submitPassword = (event) => {
     event.preventDefault();
-    if (pwForm.newPassword.length < 8) return toast.error('New password must be at least 8 characters.');
-    if (pwForm.newPassword !== pwForm.confirmPassword) return toast.error('New password and confirmation do not match.');
+    const nextErrors = {
+      currentPassword: validateRequired(pwForm.currentPassword, 'Current password'),
+      newPassword: validatePassword(pwForm.newPassword),
+      confirmPassword: pwForm.newPassword !== pwForm.confirmPassword ? 'Passwords do not match.' : '',
+    };
+    setPasswordErrors(nextErrors);
+    if (hasValidationErrors(nextErrors)) {
+      toast.error('Please fill in all required fields correctly.');
+      return;
+    }
     changePasswordMutation.mutate({ currentPassword: pwForm.currentPassword, newPassword: pwForm.newPassword });
   };
 
@@ -1243,7 +1277,7 @@ export function ProfileScreen() {
       </Card>
       <Card title="Edit profile">
         <form className="form-grid" onSubmit={submitProfile}>
-          <Field icon={UserRound} label="Full name">
+          <Field icon={UserRound} label="Full name" error={profileErrors.fullName}>
             <input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} placeholder="Enter full legal name" />
           </Field>
           <Field icon={Phone} label="Phone (optional)">
@@ -1259,13 +1293,13 @@ export function ProfileScreen() {
       </Card>
       <Card title="Change password">
         <form className="form-grid" onSubmit={submitPassword}>
-          <Field icon={LockKeyhole} label="Current password">
+          <Field icon={LockKeyhole} label="Current password" error={passwordErrors.currentPassword}>
             <input type="password" value={pwForm.currentPassword} onChange={(event) => setPwForm({ ...pwForm, currentPassword: event.target.value })} placeholder="Your current password" />
           </Field>
-          <Field icon={LockKeyhole} label="New password" help="Minimum 8 characters">
+          <Field icon={LockKeyhole} label="New password" help="Minimum 8 characters" error={passwordErrors.newPassword}>
             <input type="password" value={pwForm.newPassword} onChange={(event) => setPwForm({ ...pwForm, newPassword: event.target.value })} placeholder="Choose a new password" />
           </Field>
-          <Field icon={LockKeyhole} label="Confirm new password">
+          <Field icon={LockKeyhole} label="Confirm new password" error={passwordErrors.confirmPassword}>
             <input type="password" value={pwForm.confirmPassword} onChange={(event) => setPwForm({ ...pwForm, confirmPassword: event.target.value })} placeholder="Repeat the new password" />
           </Field>
           <div className="form-actions">
@@ -1392,24 +1426,12 @@ export function StudentFeedbackScreen() {
 
 // ----------------------- Group Workspace link helper -----------------------
 
-// Renders a row action in GroupsScreen: a Link to the workspace + optionally
-// a "Manage members" toggle for admins who still need the membership panel.
-function GroupWorkspaceLink({ groupId, onManage, currentSelected }) {
+// Renders a row action in GroupsScreen linking to the group workspace.
+function GroupWorkspaceLink({ groupId }) {
   const user = useSelector((state) => state.auth.user);
   const role = user?.role || 'admin';
   return (
-    <div className="row-actions">
-      <Link className="small-button" to={`/${role}/groups/${groupId}`}>Open workspace</Link>
-      {onManage ? (
-        <button
-          className="small-button"
-          onClick={() => onManage(currentSelected === groupId ? null : groupId)}
-          type="button"
-        >
-          {currentSelected === groupId ? 'Close members' : 'Manage members'}
-        </button>
-      ) : null}
-    </div>
+    <Link className="small-button" to={`/${role}/groups/${groupId}`}>Open workspace</Link>
   );
 }
 
@@ -1432,6 +1454,7 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [editingSubmission, setEditingSubmission] = useState(null);
   const [previewFile, setPreviewFile] = useState(null);
+  const { askConfirm, confirmDialog } = useConfirmDialog();
 
   // ---- Data ----
   const groupQuery = useGroupDetail(groupId);
@@ -1760,8 +1783,13 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
                   </button>
                   <button
                     className="small-button danger"
-                    onClick={() => {
-                      if (window.confirm(`Are you sure you want to delete guideline "${item.title}"?`)) {
+                    onClick={async () => {
+                      if (await askConfirm({
+                        title: `Delete guideline "${item.title}"?`,
+                        description: 'Students will lose access to this instructional material.',
+                        confirmLabel: 'Delete guideline',
+                        destructive: true,
+                      })) {
                         deleteGuidelineMutation.mutate(item._id);
                       }
                     }}
@@ -1848,8 +1876,13 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
                 </button>
                 <button
                   className="small-button danger"
-                  onClick={() => {
-                    if (window.confirm(`Are you sure you want to delete milestone "${item.title}"?`)) {
+                  onClick={async () => {
+                    if (await askConfirm({
+                      title: `Delete milestone "${item.title}"?`,
+                      description: 'Students will no longer see this milestone in their workspace.',
+                      confirmLabel: 'Delete milestone',
+                      destructive: true,
+                    })) {
                       deleteMilestoneMutation.mutate(item._id);
                     }
                   }}
@@ -1948,8 +1981,13 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
                 ) : null}
                 <button
                   className="small-button danger"
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to delete this submission?')) {
+                  onClick={async () => {
+                    if (await askConfirm({
+                      title: 'Delete this submission?',
+                      description: 'Uploaded files and review history for this submission will be removed.',
+                      confirmLabel: 'Delete submission',
+                      destructive: true,
+                    })) {
                       deleteSubmissionMutation.mutate(item._id);
                     }
                   }}
@@ -1971,6 +2009,7 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
           onClose={() => setPreviewFile(null)}
         />
       ) : null}
+      {confirmDialog}
     </section>
   );
 }

@@ -11,12 +11,13 @@ import {
   Send,
   X,
 } from 'lucide-react';
+import { useToast } from '../context/useToast';
 import { formatBytes, getFileCategory } from '../utils/format';
+import { ApproveSubmissionDialog, RequestChangesDialog } from './dialogs';
 
 export function PdfViewer({ url, fileName }) {
   const [state, setState] = useState({ blobUrl: null, loading: true, error: null, currentUrl: url });
 
-  // Reset loading when URL changes without synchronous setState inside effect
   const activeState = state.currentUrl === url ? state : { blobUrl: null, loading: true, error: null, currentUrl: url };
 
   useEffect(() => {
@@ -253,16 +254,60 @@ export function FeedbackReplyForm({ submission, mutation }) {
 }
 
 export function ReviewControls({ item, mutation }) {
-  const [feedback, setFeedback] = useState('');
+  const toast = useToast();
+  const [requestOpen, setRequestOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
+
+  const handleApprove = (feedback) => {
+    mutation.mutate(
+      { id: item._id, payload: { decision: 'approved', feedback } },
+      {
+        onSuccess: () => {
+          setApproveOpen(false);
+          toast.success('Submission approved');
+        },
+        onError: (error) => toast.error(error.response?.data?.message || error.message),
+      },
+    );
+  };
+
+  const handleRequestChanges = (feedback) => {
+    mutation.mutate(
+      { id: item._id, payload: { decision: 'changes_requested', feedback } },
+      {
+        onSuccess: () => {
+          setRequestOpen(false);
+          toast.success('Revision request sent');
+        },
+        onError: (error) => toast.error(error.response?.data?.message || error.message),
+      },
+    );
+  };
+
   return (
-    <form className="review-controls" onSubmit={(event) => event.preventDefault()}>
-      <input value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Feedback" />
-      <button className="small-button" onClick={() => mutation.mutate({ id: item._id, payload: { decision: 'approved', feedback } })} type="button">
-        <CheckCircle2 size={13} />Approve
-      </button>
-      <button className="small-button danger" onClick={() => mutation.mutate({ id: item._id, payload: { decision: 'changes_requested', feedback } })} type="button">
-        Request changes
-      </button>
-    </form>
+    <>
+      <div className="review-controls">
+        <button className="small-button" onClick={() => setApproveOpen(true)} type="button">
+          <CheckCircle2 size={13} />Approve
+        </button>
+        <button className="small-button danger" onClick={() => setRequestOpen(true)} type="button">
+          Request changes
+        </button>
+      </div>
+      <ApproveSubmissionDialog
+        open={approveOpen}
+        pending={mutation.isPending}
+        submission={item}
+        onClose={() => setApproveOpen(false)}
+        onConfirm={handleApprove}
+      />
+      <RequestChangesDialog
+        open={requestOpen}
+        pending={mutation.isPending}
+        submission={item}
+        onClose={() => setRequestOpen(false)}
+        onConfirm={handleRequestChanges}
+      />
+    </>
   );
 }

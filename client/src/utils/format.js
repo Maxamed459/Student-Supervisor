@@ -9,6 +9,41 @@ export function formatDate(value) {
   }).format(new Date(value));
 }
 
+export function formatRelativeTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const diffMs = date.getTime() - Date.now();
+  const absSec = Math.round(Math.abs(diffMs) / 1000);
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  if (absSec < 60) return rtf.format(Math.round(diffMs / 1000), 'second');
+  if (absSec < 3600) return rtf.format(Math.round(diffMs / 60000), 'minute');
+  if (absSec < 86400) return rtf.format(Math.round(diffMs / 3600000), 'hour');
+  if (absSec < 604800) return rtf.format(Math.round(diffMs / 86400000), 'day');
+  return formatDate(value);
+}
+
+export function formatAuditAction(action) {
+  if (!action) return 'Unknown';
+  const normalized = String(action).toLowerCase();
+  if (normalized.includes('create')) return 'Create';
+  if (normalized.includes('update') || normalized.includes('edit')) return 'Update';
+  if (normalized.includes('delete') || normalized.includes('remove')) return 'Delete';
+  if (normalized.includes('approve')) return 'Review';
+  if (normalized.includes('login')) return 'Login';
+  if (normalized.includes('review') || normalized.includes('changes')) return 'Review';
+  return action.split(/[._-]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
+
+export function auditActionBadgeValue(action) {
+  const label = formatAuditAction(action).toLowerCase();
+  if (label.includes('create')) return 'published';
+  if (label.includes('delete')) return 'changes-requested';
+  if (label.includes('review')) return 'under-review';
+  if (label.includes('login')) return 'submitted';
+  return 'scheduled';
+}
+
 export function label(value) {
   if (!value) return 'Not assigned';
   if (typeof value === 'string') return value;

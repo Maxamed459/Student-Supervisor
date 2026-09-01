@@ -831,7 +831,7 @@ function SupervisorDashboard() {
               type="button"
               className="sos-bell"
               aria-label="Notifications"
-              onClick={() => setTab("documents")}
+              onClick={() => navigate("/supervisor/notifications")}
             >
               <IconBell size={18} />
               {pendingDocs.length > 0 && <span className="sos-bell-dot" />}

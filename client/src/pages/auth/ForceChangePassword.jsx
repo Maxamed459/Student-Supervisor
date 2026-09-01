@@ -7,6 +7,11 @@ import { changePasswordRequest, logoutRequest } from '../../services/apiClient';
 import { BrandMark, Field } from '../../components/common';
 import { useToast } from '../../context/useToast';
 import { logout } from '../../store/slices/authSlice';
+import {
+  hasValidationErrors,
+  validatePassword,
+  validateRequired,
+} from '../../utils/validation';
 
 /**
  * Full-page gate rendered by ProtectedLayout whenever the signed-in user
@@ -23,6 +28,7 @@ export function ForceChangePasswordScreen({ userName }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [errors, setErrors] = useState({});
 
   const mutation = useMutation({
     mutationFn: changePasswordRequest,
@@ -35,14 +41,30 @@ export function ForceChangePasswordScreen({ userName }) {
     onError: (error) => toast.error(error.response?.data?.message || error.message),
   });
 
+  const validate = () => {
+    const next = {
+      currentPassword: validateRequired(form.currentPassword, 'Current password'),
+      newPassword: validatePassword(form.newPassword),
+      confirmPassword: validateRequired(form.confirmPassword, 'Confirm password'),
+    };
+    if (!next.confirmPassword && form.newPassword !== form.confirmPassword) {
+      next.confirmPassword = 'Passwords do not match.';
+    }
+    setErrors(next);
+    return !hasValidationErrors(next);
+  };
+
+  const updateField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+    if (errors[field]) {
+      setErrors((current) => ({ ...current, [field]: '' }));
+    }
+  };
+
   const submit = (event) => {
     event.preventDefault();
-    if (form.newPassword.length < 8) {
-      toast.error('New password must be at least 8 characters.');
-      return;
-    }
-    if (form.newPassword !== form.confirmPassword) {
-      toast.error('New password and confirmation do not match.');
+    if (!validate()) {
+      toast.error('Please fill in all required fields correctly.');
       return;
     }
     mutation.mutate({ currentPassword: form.currentPassword, newPassword: form.newPassword });
@@ -66,27 +88,27 @@ export function ForceChangePasswordScreen({ userName }) {
               Hi {userName || 'there'} — you need to set a new password before you can continue.
             </p>
           </div>
-          <Field icon={LockKeyhole} label="Current password">
+          <Field error={errors.currentPassword} icon={LockKeyhole} label="Current password">
             <input
               type="password"
               value={form.currentPassword}
-              onChange={(event) => setForm({ ...form, currentPassword: event.target.value })}
+              onChange={(event) => updateField('currentPassword', event.target.value)}
               placeholder="The password you were given"
             />
           </Field>
-          <Field icon={LockKeyhole} label="New password" help="Minimum 8 characters">
+          <Field error={errors.newPassword} icon={LockKeyhole} label="New password" help="Minimum 8 characters">
             <input
               type="password"
               value={form.newPassword}
-              onChange={(event) => setForm({ ...form, newPassword: event.target.value })}
+              onChange={(event) => updateField('newPassword', event.target.value)}
               placeholder="Choose a new password"
             />
           </Field>
-          <Field icon={LockKeyhole} label="Confirm new password">
+          <Field error={errors.confirmPassword} icon={LockKeyhole} label="Confirm new password">
             <input
               type="password"
               value={form.confirmPassword}
-              onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+              onChange={(event) => updateField('confirmPassword', event.target.value)}
               placeholder="Repeat the new password"
             />
           </Field>
