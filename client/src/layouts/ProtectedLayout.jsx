@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useDispatch, useSelector } from 'react-redux';
-import { Bell, LogOut, Menu } from 'lucide-react';
+import { Bell, LogOut, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { fetchMe, fetchNotificationMeta, logoutRequest, tokenStore } from '../services/apiClient';
 import { roleRoutes, isSupportedRole } from '../config/navigation';
 import { ConfirmDialog } from '../components/dialogs';
@@ -82,7 +82,6 @@ export function ProtectedLayout() {
         collapsed={sidebarCollapsed}
         mobileOpen={mobileMenuOpen}
         onCloseMobile={() => setMobileMenuOpen(false)}
-        onToggle={() => setSidebarCollapsed((value) => !value)}
         pathname={location.pathname}
         role={user.role}
       />
@@ -97,6 +96,15 @@ export function ProtectedLayout() {
               type="button"
             >
               <Menu size={18} />
+            </button>
+            <button
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="icon-button desktop-sidebar-toggle"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              type="button"
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
             <h1>{currentTitle}</h1>
           </div>

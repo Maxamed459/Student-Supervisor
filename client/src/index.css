@@ -475,13 +475,23 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  width: 100%;
 }
 
 .sidebar-brand-block {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
+  width: 100%;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  width: 100%;
 }
 
 .sidebar-dashboard-label {
@@ -498,25 +508,12 @@ button {
   letter-spacing: 0.2px;
 }
 
-.sidebar-toggle {
+.desktop-sidebar-toggle {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(216, 231, 255, 0.16);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(216, 231, 255, 0.9);
-}
-
-.sidebar-toggle:hover {
-  background: rgba(216, 231, 255, 0.14);
-  color: #ffffff;
 }
 
 .sidebar-collapsed .sidebar {
-  padding-inline: 18px;
+  padding-inline: 14px;
 }
 
 .sidebar-collapsed .brand-word,
@@ -526,8 +523,15 @@ button {
 }
 
 .sidebar-collapsed .sidebar-head {
-  flex-direction: column;
-  gap: 16px;
+  justify-content: center;
+}
+
+.sidebar-collapsed .sidebar-brand-block {
+  align-items: center;
+}
+
+.sidebar-collapsed .sidebar-brand {
+  justify-content: center;
 }
 
 .sidebar-collapsed .nav-link {
@@ -605,15 +609,6 @@ button {
   flex-shrink: 0;
 }
 
-/* Hidden on desktop, shown on mobile */
-.mobile-menu-toggle {
-  display: none;
-}
-
-.sidebar-mobile-close {
-  display: none;
-}
-
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -635,6 +630,21 @@ button {
 .icon-button:hover {
   background: rgba(7, 27, 51, 0.08);
   color: var(--color-navy);
+}
+
+/* Hidden on desktop, only shown on mobile */
+.mobile-menu-toggle,
+.icon-button.mobile-menu-toggle {
+  display: none !important;
+}
+
+.sidebar-mobile-close {
+  display: none;
+}
+
+.desktop-sidebar-toggle,
+.icon-button.desktop-sidebar-toggle {
+  display: inline-flex;
 }
 
 .avatar {
@@ -2729,7 +2739,7 @@ th {
     display: block;
   }
 
-  .sidebar-toggle {
+  .desktop-sidebar-toggle {
     display: none;
   }
 
@@ -2757,9 +2767,15 @@ th {
     display: block;
   }
 
-  /* hamburger toggle visible on mobile */
-  .mobile-menu-toggle {
-    display: inline-flex;
+  /* hamburger toggle visible on mobile, desktop toggle hidden */
+  .mobile-menu-toggle,
+  .icon-button.mobile-menu-toggle {
+    display: inline-flex !important;
+  }
+
+  .desktop-sidebar-toggle,
+  .icon-button.desktop-sidebar-toggle {
+    display: none !important;
   }
 
   .topbar {
