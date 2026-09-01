@@ -213,6 +213,7 @@ All endpoints are prefixed with `/api`. 🔒 = requires `Authorization` header.
 | GET | /students/:id/milestones | 🔒 Any (scoped) | FR-T2 |
 | GET | /students/:id/progress | 🔒 Any (scoped) | FR-S8/FR-T7 |
 | GET | /admin/dashboard | 🔒 Admin | FR-A5/FR-A6 |
+| GET | /admin/reports | 🔒 Admin | Aggregated progress report (`?groupId=` optional). No dedicated Report model. |
 
 ### Uploads, notifications, settings, audit
 | Method | Path | Access | Notes |

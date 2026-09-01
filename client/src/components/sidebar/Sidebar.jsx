@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { roleRoutes } from '../../config/navigation';
 import { BrandMark } from '../common';
 
@@ -9,7 +9,7 @@ const roleDashboardTitles = {
   student: 'Student Dashboard',
 };
 
-export function Sidebar({ collapsed, onToggle, role, pathname, mobileOpen, onCloseMobile }) {
+export function Sidebar({ collapsed, role, pathname, mobileOpen, onCloseMobile }) {
   const links = roleRoutes[role] || [];
   const dashboardTitle = roleDashboardTitles[role] || `${role ? role.charAt(0).toUpperCase() + role.slice(1) : ''} Dashboard`;
 
@@ -24,15 +24,12 @@ export function Sidebar({ collapsed, onToggle, role, pathname, mobileOpen, onClo
         <div className="sidebar-head">
           <div className="sidebar-brand-block">
             <Link className="sidebar-brand" to={`/${role}/dashboard`} onClick={onCloseMobile}>
-              <BrandMark compact />
+              <BrandMark compact={false} />
             </Link>
             <div className="sidebar-dashboard-label">
               {dashboardTitle}
             </div>
           </div>
-          <button className="sidebar-toggle" onClick={onToggle} type="button" aria-label="Toggle sidebar">
-            {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          </button>
           <button className="sidebar-mobile-close" onClick={onCloseMobile} type="button" aria-label="Close sidebar">
             <X size={18} />
           </button>
@@ -54,3 +51,4 @@ export function Sidebar({ collapsed, onToggle, role, pathname, mobileOpen, onClo
     </>
   );
 }
+

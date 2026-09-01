@@ -194,12 +194,12 @@ export function SkeletonTable({ columns }) {
   );
 }
 
-export function TableState({ icon: Icon, text, title, actionLabel, onAction }) {
+export function TableState({ icon: Icon = Search, text, title, actionLabel, onAction }) {
   return (
     <div className="table-state table-state-rich">
-      <div className="table-state-icon"><Icon size={22} /></div>
+      {Icon ? <div className="table-state-icon"><Icon size={22} /></div> : null}
       {title ? <strong>{title}</strong> : null}
-      <span>{text}</span>
+      {text ? <span>{text}</span> : null}
       {onAction ? (
         <button className="primary-button inline" onClick={onAction} type="button">{actionLabel}</button>
       ) : null}

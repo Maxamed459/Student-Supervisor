@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
-import { api, listResource } from '../services/apiClient';
+import { api, fetchAdminDashboard, fetchAdminReports, listResource } from '../services/apiClient';
 
 const defaultResourceSpecs = {
   users: ['/users', 'users'],
@@ -78,6 +78,24 @@ export function useDashboardData(role) {
     notifications,
     auditLogs,
   };
+}
+
+export function useAdminDashboard(enabled = true) {
+  return useQuery({
+    queryKey: ['adminDashboard'],
+    queryFn: fetchAdminDashboard,
+    enabled,
+    retry: false,
+  });
+}
+
+export function useAdminReports(groupId, enabled = true) {
+  return useQuery({
+    queryKey: ['adminReports', groupId || 'all'],
+    queryFn: () => fetchAdminReports(groupId || undefined),
+    enabled,
+    retry: false,
+  });
 }
 
 // Fetch a single Group by id — used by GroupWorkspaceScreen.
