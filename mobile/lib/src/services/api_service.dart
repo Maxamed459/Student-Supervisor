@@ -176,10 +176,19 @@ class ApiService {
   }
 
   Future<List<dynamic>> getStudentSubmissions(String studentId) async {
-    final data = await _request(
-      method: 'GET',
-      path: '/students/$studentId/submissions',
-    );
+    try {
+      return await getSubmissions();
+    } catch (_) {
+      final data = await _request(
+        method: 'GET',
+        path: '/students/$studentId/submissions',
+      );
+      return (data['submissions'] as List<dynamic>?) ?? [];
+    }
+  }
+
+  Future<List<dynamic>> getSubmissions() async {
+    final data = await _request(method: 'GET', path: '/submissions');
     return (data['submissions'] as List<dynamic>?) ?? [];
   }
 
@@ -518,10 +527,16 @@ class ApiService {
     return (data['submission'] as Map<String, dynamic>?) ?? data;
   }
 
-  Future<Map<String, dynamic>> approveSubmission(String id) async {
+  Future<Map<String, dynamic>> approveSubmission(
+    String id, {
+    String? comment,
+  }) async {
     final data = await _request(
       method: 'PATCH',
       path: '/submissions/$id/approve',
+      body: comment != null && comment.trim().isNotEmpty
+          ? {'comment': comment.trim()}
+          : null,
     );
     return (data['submission'] as Map<String, dynamic>?) ?? data;
   }

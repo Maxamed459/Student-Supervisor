@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { useToast } from '../context/useToast';
-import { formatBytes, getFileCategory } from '../utils/format';
+import { formatBytes, formatDate, getFileCategory } from '../utils/format';
 import { ApproveSubmissionDialog, RequestChangesDialog } from './dialogs';
 
 export function PdfViewer({ url, fileName }) {
@@ -250,6 +250,35 @@ export function FeedbackReplyForm({ submission, mutation }) {
         <Send size={13} />Send
       </button>
     </form>
+  );
+}
+
+export function SubmissionFeedbackCell({ submission }) {
+  const feedback = submission.review?.feedback?.trim();
+  if (!feedback) {
+    return <span className="muted">No feedback yet</span>;
+  }
+  return (
+    <div className="submission-feedback-cell">
+      <p>{feedback}</p>
+      {submission.review?.reviewedAt ? (
+        <small>{formatDate(submission.review.reviewedAt)}</small>
+      ) : null}
+    </div>
+  );
+}
+
+export function SubmissionStudentReplyCell({ submission }) {
+  const latest = submission.latestStudentReply;
+  const count = submission.studentReplies?.length || 0;
+  if (!latest) {
+    return <span className="muted">No student replies</span>;
+  }
+  return (
+    <div className="submission-feedback-cell">
+      <small>{count} student repl{count === 1 ? 'y' : 'ies'}</small>
+      <p>{latest.content}</p>
+    </div>
   );
 }
 

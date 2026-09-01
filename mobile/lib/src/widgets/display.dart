@@ -132,3 +132,56 @@ String titleOf(dynamic item, {String fallback = 'Untitled'}) {
     fallback: fallback,
   );
 }
+
+String commentAuthorRole(dynamic comment) {
+  if (comment is! Map) return '';
+  final author = comment['authorId'];
+  if (author is Map) {
+    return field(author, const ['role']);
+  }
+  return field(comment, const ['authorRole', 'role']);
+}
+
+String commentContent(dynamic comment) {
+  return field(comment, const ['content', 'message', 'comment']);
+}
+
+Map<String, dynamic>? latestSupervisorFeedback(
+  List<dynamic> comments,
+  String status,
+) {
+  if (status != 'changes_requested' && status != 'approved') {
+    return null;
+  }
+  for (final comment in comments.reversed) {
+    if (comment is! Map) continue;
+    if (commentAuthorRole(comment) == 'supervisor') {
+      return Map<String, dynamic>.from(comment);
+    }
+  }
+  return null;
+}
+
+List<dynamic> discussionComments(
+  List<dynamic> comments,
+  Map<String, dynamic>? feedbackNote,
+) {
+  if (feedbackNote == null) return comments;
+  return comments.where((comment) => comment != feedbackNote).toList();
+}
+
+List<Map<String, dynamic>> studentDiscussionComments(List<dynamic> comments) {
+  return [
+    for (final comment in comments)
+      if (comment is Map && commentAuthorRole(comment) == 'student')
+        Map<String, dynamic>.from(comment),
+  ];
+}
+
+String submissionStudentName(dynamic item) {
+  final student = item is Map ? item['studentId'] ?? item['student'] : null;
+  if (student is Map) {
+    return field(student, const ['fullName', 'name'], fallback: 'Student');
+  }
+  return field(item, const ['studentName'], fallback: 'Student');
+}

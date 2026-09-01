@@ -2289,9 +2289,12 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
           (detail['comments'] as List<dynamic>?) ?? const [],
         );
         final versions = _submissionVersions(detail);
-        final feedbackNote = _latestSupervisorFeedback(allComments, status);
-        final threadComments = _discussionComments(allComments, feedbackNote);
+        final feedbackNote = latestSupervisorFeedback(allComments, status);
+        final threadComments = discussionComments(allComments, feedbackNote);
         final milestoneId = _milestoneIdFromDetail(detail);
+        final studentName = submissionStudentName(detail);
+        final reviewedAt = formatStamp(field(detail, const ['reviewedAt']));
+        final canDecide = canReview && status != 'approved';
 
         Future<void> refreshDetail() async {
           if (id.isEmpty) return;
@@ -2309,6 +2312,14 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
             ),
             const SizedBox(height: 10),
             SsmsStatusMark(status),
+            if (canReview && studentName.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Student: $studentName', style: SsmsType.meta),
+            ],
+            if (reviewedAt.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('Reviewed $reviewedAt', style: SsmsType.meta),
+            ],
             const SizedBox(height: 18),
             Text('UPLOADS', style: SsmsType.kicker),
             const SizedBox(height: 8),
@@ -2341,7 +2352,12 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
               ),
             ],
             const SizedBox(height: 18),
-            Text('SUPERVISOR FEEDBACK', style: SsmsType.kicker),
+            Text(
+              status == 'changes_requested'
+                  ? 'CHANGE REQUEST'
+                  : 'SUPERVISOR FEEDBACK',
+              style: SsmsType.kicker,
+            ),
             const SizedBox(height: 8),
             SsmsCard(
               color: SsmsColors.field,
@@ -2356,11 +2372,15 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                   Text(_feedbackDetail(status), style: SsmsType.body),
                   if (feedbackNote != null) ...[
                     const SizedBox(height: 12),
-                    Text('Feedback note', style: SsmsType.kicker),
+                    Text(
+                      status == 'changes_requested'
+                          ? 'Requested changes'
+                          : 'Feedback note',
+                      style: SsmsType.kicker,
+                    ),
                     const SizedBox(height: 6),
                     Text(
-                      field(feedbackNote,
-                          const ['content', 'message', 'comment']),
+                      commentContent(feedbackNote),
                       style: SsmsType.body.copyWith(color: SsmsColors.ink),
                     ),
                     if (formatStamp(
@@ -2373,25 +2393,16 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                       ),
                     ],
                   ],
-                  if (canReview && status == 'pending') ...[
+                  if (canDecide) ...[
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: () async {
-                        final ok = await controller.approve(id);
-                        if (!ok || !context.mounted) return;
-                        await refreshDetail();
-                      },
-                      child: const Text('Approve submission'),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      onPressed: () async {
-                        final feedbackCtrl = TextEditingController();
+                        final noteCtrl = TextEditingController();
                         final submitted = await showDialog<bool>(
                           context: context,
                           builder: (context) => AlertDialog(
                             title: Text(
-                              'Request changes',
+                              'Approve submission',
                               style: SsmsType.serif,
                             ),
                             content: Column(
@@ -2399,17 +2410,15 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'This official feedback is sent to the student and changes the submission status.',
+                                  'Optional approval note for the student.',
                                   style: SsmsType.body,
                                 ),
                                 const SizedBox(height: 14),
                                 TextField(
-                                  controller: feedbackCtrl,
-                                  maxLines: 4,
+                                  controller: noteCtrl,
+                                  maxLines: 3,
                                   decoration: const InputDecoration(
-                                    labelText: 'Supervisor feedback',
-                                    hintText:
-                                        'Explain what needs to be changed…',
+                                    labelText: 'Approval note (optional)',
                                   ),
                                 ),
                               ],
@@ -2421,25 +2430,88 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                               ),
                               TextButton(
                                 onPressed: () => Navigator.pop(context, true),
-                                child: const Text('Send feedback'),
+                                child: const Text('Approve'),
                               ),
                             ],
                           ),
                         );
-                        if (submitted == true &&
-                            feedbackCtrl.text.trim().isNotEmpty) {
-                          final ok = await controller.requestChanges(
-                            submissionId: id,
-                            comment: feedbackCtrl.text.trim(),
+                        if (submitted == true) {
+                          final ok = await controller.approve(
+                            id,
+                            comment: noteCtrl.text.trim(),
                           );
                           if (ok && context.mounted) {
                             await refreshDetail();
                           }
                         }
-                        feedbackCtrl.dispose();
+                        noteCtrl.dispose();
                       },
-                      child: const Text('Request changes'),
+                      child: const Text('Approve submission'),
                     ),
+                    if (status == 'pending') ...[
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        onPressed: () async {
+                          final feedbackCtrl = TextEditingController();
+                          final submitted = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Text(
+                                'Request changes',
+                                style: SsmsType.serif,
+                              ),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Describe the changes the student must make. This becomes the official change request.',
+                                    style: SsmsType.body,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  TextField(
+                                    controller: feedbackCtrl,
+                                    maxLines: 4,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Requested changes',
+                                      hintText:
+                                          'Explain what needs to be changed…',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Send change request'),
+                                ),
+                              ],
+                            ),
+                          );
+                          final feedback = feedbackCtrl.text.trim();
+                          feedbackCtrl.dispose();
+                          if (submitted != true) return;
+                          if (feedback.isEmpty) {
+                            controller.actionError.value =
+                                'Requested changes are required.';
+                            return;
+                          }
+                          final ok = await controller.requestChanges(
+                            submissionId: id,
+                            comment: feedback,
+                          );
+                          if (ok && context.mounted) {
+                            await refreshDetail();
+                          }
+                        },
+                        child: const Text('Request changes'),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -2448,12 +2520,19 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
             Text('COMMENTS', style: SsmsType.kicker),
             const SizedBox(height: 6),
             Text(
-              'Discussion about this submission. Comments do not change review status.',
+              canUpload && status == 'changes_requested'
+                  ? 'Reply to the change request or upload a revised file.'
+                  : 'Discussion about this submission. Comments do not change review status.',
               style: SsmsType.meta,
             ),
             const SizedBox(height: 10),
             if (threadComments.isEmpty)
-              Text('No comments yet.', style: SsmsType.meta)
+              Text(
+                canUpload && status == 'changes_requested'
+                    ? 'No replies yet. Post your response below.'
+                    : 'No comments yet.',
+                style: SsmsType.meta,
+              )
             else
               for (final comment in threadComments)
                 _CommentRow(comment: comment),
@@ -2461,9 +2540,13 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
             TextField(
               controller: commentCtrl,
               maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Add a comment about this submission…',
-                labelText: 'Comment',
+              decoration: InputDecoration(
+                hintText: canUpload && status == 'changes_requested'
+                    ? 'Reply to supervisor feedback…'
+                    : 'Add a comment about this submission…',
+                labelText: canUpload && status == 'changes_requested'
+                    ? 'Your feedback'
+                    : 'Comment',
               ),
             ),
             const SizedBox(height: 10),
@@ -2482,7 +2565,11 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                         ? null
                         : () async {
                             final text = commentCtrl.text.trim();
-                            if (text.isEmpty) return;
+                            if (text.isEmpty) {
+                              controller.actionError.value =
+                                  'Enter a message before posting.';
+                              return;
+                            }
                             final ok = await controller.addComment(
                               submissionId: id,
                               content: text,
@@ -2492,7 +2579,7 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                             await refreshDetail();
                           },
                     icon: const Icon(Icons.comment_outlined, size: 18),
-                    label: Text(busy ? 'Posting…' : 'Post comment'),
+                    label: Text(busy ? 'Posting…' : 'Post feedback'),
                   ),
                 ],
               );
@@ -2549,29 +2636,6 @@ List<Map<String, dynamic>> _submissionVersions(dynamic detail) {
     for (final version in versions)
       if (version is Map) Map<String, dynamic>.from(version),
   ];
-}
-
-dynamic _latestSupervisorFeedback(List<dynamic> comments, String status) {
-  if (status != 'changes_requested' && status != 'approved') {
-    return null;
-  }
-  for (final comment in comments.reversed) {
-    if (comment is! Map) continue;
-    final author = comment['authorId'];
-    final role = author is Map
-        ? field(author, const ['role'])
-        : field(comment, const ['authorRole', 'role']);
-    if (role == 'supervisor') return comment;
-  }
-  return null;
-}
-
-List<dynamic> _discussionComments(
-  List<dynamic> comments,
-  dynamic feedbackNote,
-) {
-  if (feedbackNote == null) return comments;
-  return comments.where((comment) => comment != feedbackNote).toList();
 }
 
 String _feedbackHeadline(String status) {
@@ -2658,10 +2722,8 @@ class _CommentRow extends StatelessWidget {
     final authorName = author is Map
         ? field(author, const ['fullName', 'name'], fallback: 'User')
         : 'User';
-    final role = author is Map
-        ? field(author, const ['role'])
-        : field(comment, const ['authorRole', 'role']);
-    final content = field(comment, const ['content', 'message', 'comment']);
+    final role = commentAuthorRole(comment);
+    final content = commentContent(comment);
     final when = formatStamp(field(comment, const ['createdAt']));
 
     return Padding(

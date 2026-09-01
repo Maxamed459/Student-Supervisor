@@ -40,7 +40,16 @@ const normalizeMilestone = (milestone) => {
 const normalizeSubmission = (submission) => {
   if (!submission) return submission;
   const currentVersion = submission.currentVersion || submission.versions?.at(-1)?.versionNumber || 1;
-  const latestComment = submission.comments?.at(-1);
+  const comments = submission.comments || [];
+  const status = submission.status;
+  const supervisorFeedback = [...comments].reverse().find((comment) => {
+    const role = comment?.authorId?.role || comment?.authorRole || comment?.role;
+    return role === 'supervisor';
+  });
+  const studentReplies = comments.filter((comment) => {
+    const role = comment?.authorId?.role || comment?.authorRole || comment?.role;
+    return role === 'student';
+  });
   return {
     ...submission,
     milestone: submission.milestone || submission.milestoneId || null,
@@ -48,10 +57,14 @@ const normalizeSubmission = (submission) => {
     group: submission.group || submission.milestoneId?.groupId || submission.studentId?.groupId || null,
     currentVersion,
     review: submission.review || {
-      decision: submission.status,
-      feedback: latestComment?.content || '',
+      decision: status,
+      feedback: ['changes_requested', 'approved'].includes(status)
+        ? supervisorFeedback?.content || ''
+        : '',
       reviewedAt: submission.reviewedAt,
     },
+    studentReplies,
+    latestStudentReply: studentReplies.at(-1) || null,
   };
 };
 

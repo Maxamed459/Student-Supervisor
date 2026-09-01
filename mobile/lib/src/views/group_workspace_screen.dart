@@ -272,6 +272,41 @@ class _GroupWorkspaceScreenState extends State<GroupWorkspaceScreen> {
                   : '${groupSubmissions.length}',
             ),
             if (isStudent)
+              ...groupSubmissions
+                  .where(
+                    (item) =>
+                        field(item, const ['status']) == 'changes_requested',
+                  )
+                  .map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: SsmsCard(
+                        color: const Color(0xFFFFF7F7),
+                        onTap: () => openSubmissionDetail(context, item),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Change request',
+                              style: SsmsType.label
+                                  .copyWith(color: SsmsColors.danger),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              titleOf(item, fallback: 'Submission'),
+                              style: SsmsType.label.copyWith(fontSize: 14),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Open to read requested changes and send your feedback.',
+                              style: SsmsType.body,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+            if (isStudent)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
                 child: Align(
@@ -296,6 +331,7 @@ class _GroupWorkspaceScreenState extends State<GroupWorkspaceScreen> {
                     for (final item in groupSubmissions) ...[
                       _SubmissionTile(
                         item: item,
+                        showStudentName: isSupervisor,
                         onTap: () => openSubmissionDetail(context, item),
                       ),
                       const SizedBox(height: 10),
@@ -320,6 +356,7 @@ class _GroupWorkspaceScreenState extends State<GroupWorkspaceScreen> {
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
                                 child: Column(
@@ -327,21 +364,67 @@ class _GroupWorkspaceScreenState extends State<GroupWorkspaceScreen> {
                                   children: [
                                     Text(
                                       titleOf(item, fallback: 'Submission'),
-                                      style: SsmsType.label.copyWith(fontSize: 14),
+                                      style:
+                                          SsmsType.label.copyWith(fontSize: 14),
                                     ),
                                     const SizedBox(height: 4),
-                                    SsmsStatusMark(field(item, const ['status'])),
+                                    SsmsStatusMark(
+                                      field(item, const ['status']),
+                                    ),
+                                    if (field(item, const ['reviewedAt'])
+                                        .isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Reviewed ${formatStamp(field(item, const ['reviewedAt']))}',
+                                        style: SsmsType.meta,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
                               TextButton(
                                 onPressed: () =>
                                     openSubmissionDetail(context, item),
-                                child: const Text('View'),
+                                child: Text(
+                                  field(item, const ['status']) ==
+                                          'changes_requested'
+                                      ? 'Reply'
+                                      : 'View',
+                                ),
                               ),
                             ],
                           ),
                         ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (isSupervisor && groupSubmissions.isNotEmpty) ...[
+              const SsmsSectionLabel('Student feedback'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SsmsCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Student replies to change requests appear in each submission thread.',
+                        style: SsmsType.body,
+                      ),
+                      const SizedBox(height: 12),
+                      for (final item in groupSubmissions) ...[
+                        if (field(item, const ['status']) ==
+                            'changes_requested')
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _SupervisorFeedbackPreview(
+                              item: item,
+                              onOpen: () =>
+                                  openSubmissionDetail(context, item),
+                            ),
+                          ),
+                      ],
                     ],
                   ),
                 ),
@@ -470,30 +553,115 @@ class _MilestoneTile extends StatelessWidget {
 }
 
 class _SubmissionTile extends StatelessWidget {
-  const _SubmissionTile({required this.item, required this.onTap});
+  const _SubmissionTile({
+    required this.item,
+    required this.onTap,
+    this.showStudentName = false,
+  });
 
   final dynamic item;
   final VoidCallback onTap;
+  final bool showStudentName;
 
   @override
   Widget build(BuildContext context) {
+    final status = field(item, const ['status']);
+    final comments = (item is Map ? item['comments'] : null) as List<dynamic>?;
+    final studentReplies = comments == null
+        ? const <Map<String, dynamic>>[]
+        : studentDiscussionComments(comments);
+    final latestReply =
+        studentReplies.isEmpty ? null : studentReplies.last;
+
     return SsmsCard(
       onTap: onTap,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(titleOf(item, fallback: 'Submission'), style: SsmsType.label),
+                if (showStudentName) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    submissionStudentName(item),
+                    style: SsmsType.meta,
+                  ),
+                ],
                 const SizedBox(height: 6),
-                SsmsStatusMark(field(item, const ['status'])),
+                SsmsStatusMark(status),
+                if (status == 'changes_requested' && latestReply != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Student reply: ${commentContent(latestReply)}',
+                    style: SsmsType.meta.copyWith(color: SsmsColors.navy),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
           const Icon(Icons.chevron_right_rounded, color: SsmsColors.muted),
         ],
       ),
+    );
+  }
+}
+
+class _SupervisorFeedbackPreview extends StatelessWidget {
+  const _SupervisorFeedbackPreview({
+    required this.item,
+    required this.onOpen,
+  });
+
+  final dynamic item;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final comments =
+        (item is Map ? item['comments'] : null) as List<dynamic>? ?? [];
+    final status = field(item, const ['status']);
+    final studentReplies = studentDiscussionComments(comments);
+    final latestReply =
+        studentReplies.isEmpty ? null : studentReplies.last;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${submissionStudentName(item)} · ${titleOf(item, fallback: 'Submission')}',
+                style: SsmsType.label.copyWith(fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              SsmsStatusMark(status),
+              if (latestReply != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  commentContent(latestReply),
+                  style: SsmsType.body,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else ...[
+                const SizedBox(height: 6),
+                Text(
+                  'No student reply yet.',
+                  style: SsmsType.meta,
+                ),
+              ],
+            ],
+          ),
+        ),
+        TextButton(onPressed: onOpen, child: const Text('Open')),
+      ],
     );
   }
 }

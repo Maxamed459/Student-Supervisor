@@ -187,17 +187,6 @@ class _LoginViewState extends State<LoginView> {
                             'Remember me',
                             style: SsmsType.body.copyWith(fontSize: 14),
                           ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () => showSsmsInfoDialog(
-                              context: context,
-                              title: 'Forgot password?',
-                              message:
-                                  'Password resets are handled by your administrator. '
-                                  'Contact your supervisor or system admin to receive new credentials.',
-                            ),
-                            child: const Text('Forgot password?'),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 16),

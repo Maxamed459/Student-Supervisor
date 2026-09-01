@@ -257,18 +257,23 @@ class DashboardController extends GetxController {
   Future<List<dynamic>> _loadSupervisorSubmissions(
     List<dynamic> milestoneList,
   ) async {
-    final ids = milestoneList
-        .map((item) => field(item, const ['_id', 'id']))
-        .where((id) => id.isNotEmpty)
-        .toList();
-    if (ids.isEmpty) return [];
+    try {
+      return await api.getSubmissions();
+    } catch (_) {
+      final ids = milestoneList
+          .map((item) => field(item, const ['_id', 'id']))
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (ids.isEmpty) return [];
 
-    final batches = await Future.wait(
-      ids.map(
-        (id) => api.getMilestoneSubmissions(id).catchError((_) => <dynamic>[]),
-      ),
-    );
-    return batches.expand((batch) => batch).toList();
+      final batches = await Future.wait(
+        ids.map(
+          (id) =>
+              api.getMilestoneSubmissions(id).catchError((_) => <dynamic>[]),
+        ),
+      );
+      return batches.expand((batch) => batch).toList();
+    }
   }
 
   Future<void> markNotificationRead(String id) async {
@@ -397,11 +402,11 @@ class DashboardController extends GetxController {
     }
   }
 
-  Future<bool> approve(String submissionId) async {
+  Future<bool> approve(String submissionId, {String? comment}) async {
     actionLoading.value = true;
     actionError.value = '';
     try {
-      await api.approveSubmission(submissionId);
+      await api.approveSubmission(submissionId, comment: comment);
       await load();
       return true;
     } catch (exception) {

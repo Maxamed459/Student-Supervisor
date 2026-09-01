@@ -54,7 +54,7 @@ import {
 import { FormDialog } from '../../components/dialogs';
 import { DashboardHeader, DashboardStatCard, DashboardCTACard, DashboardActivityChart, countCreatedToday } from '../../components/dashboard';
 import { GroupForm, GuidelineForm, MilestoneForm, SubmissionForm, UserForm } from '../../components/forms';
-import { FeedbackReplyForm, FileViewerDialog, ReviewControls, SubmissionFiles } from '../../components/submission';
+import { FeedbackReplyForm, FileViewerDialog, ReviewControls, SubmissionFeedbackCell, SubmissionFiles, SubmissionStudentReplyCell } from '../../components/submission';
 
 // ----------------------- Dashboard -----------------------
 
@@ -1600,6 +1600,15 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
     onError: (error) => toast.error(error.response?.data?.message || error.message),
   });
 
+  const commentMutation = useMutation({
+    mutationFn: ({ id, message }) => createResource(`/submissions/${id}/comments`, { message }, 'submission'),
+    onSuccess: () => {
+      toast.success('Feedback posted');
+      queryClient.invalidateQueries();
+    },
+    onError: (error) => toast.error(error.response?.data?.message || error.message),
+  });
+
   // ---- Loading / error states ----
   if (groupQuery.isLoading) {
     return <FullPageState title="Loading group workspace…" />;
@@ -1964,9 +1973,14 @@ export function GroupWorkspaceScreen({ role: roleProp }) {
             ['Status', (item) => <Badge value={item.status} />],
             ['Updated', (item) => formatDate(item.updatedAt)],
             isSupervisor
+              ? ['Student replies', (item) => <SubmissionStudentReplyCell submission={item} />]
+              : isStudent
+                ? ['Change request', (item) => <SubmissionFeedbackCell submission={item} />]
+                : null,
+            isSupervisor
               ? ['Review', (item) => <ReviewControls item={item} mutation={reviewMutation} />]
               : isStudent
-                ? ['Decision', (item) => <Badge value={item.review?.decision || 'pending'} />]
+                ? ['Reply', (item) => <FeedbackReplyForm submission={item} mutation={commentMutation} />]
                 : null,
             isStudent ? ['Actions', (item) => (
               <div className="row-actions">

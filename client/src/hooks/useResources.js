@@ -26,7 +26,8 @@ function getResourceSpec(name, user) {
   }
 
   if (name === 'submissions' && user.role === 'student') {
-    return [`/students/${user._id}/submissions`, 'submissions'];
+    // Role-scoped /submissions includes populated comments for feedback threads.
+    return ['/submissions', 'submissions'];
   }
 
   if (name === 'progress' && user.role === 'student') {

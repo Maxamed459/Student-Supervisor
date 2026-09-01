@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 
 import 'controllers/auth_controller.dart';
 import 'theme/app_theme.dart';
-import 'views/change_password_screen.dart';
 import 'views/login_view.dart';
 import 'views/shell_view.dart';
 import 'views/splash_view.dart';
@@ -23,9 +22,6 @@ class StudentSupervisorMobileApp extends StatelessWidget {
         builder: (controller) {
           if (!controller.splashDone.value) {
             return const SplashView();
-          }
-          if (controller.needsPasswordChange.value) {
-            return const ChangePasswordScreen(requiredChange: true);
           }
           return controller.isAuthenticated
               ? const ShellView()

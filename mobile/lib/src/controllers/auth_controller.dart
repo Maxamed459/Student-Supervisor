@@ -19,7 +19,7 @@ class AuthController extends GetxController {
   final needsPasswordChange = false.obs;
   final splashDone = false.obs;
 
-  bool get isAuthenticated => user.value != null && !needsPasswordChange.value;
+  bool get isAuthenticated => user.value != null;
 
   static bool isSupportedRole(String role) =>
       role == 'student' || role == 'supervisor';
@@ -60,12 +60,6 @@ class AuthController extends GetxController {
         await prefs.remove('ssms_user');
         return;
       }
-      if (liveUser.mustChangePassword) {
-        needsPasswordChange.value = true;
-        user.value = liveUser;
-        await _persistUser(liveUser);
-        return;
-      }
       user.value = liveUser;
       needsPasswordChange.value = false;
       await _persistUser(liveUser);
@@ -97,7 +91,7 @@ class AuthController extends GetxController {
       }
       user.value = loggedIn;
       await _persistUser(loggedIn);
-      needsPasswordChange.value = loggedIn.mustChangePassword;
+      needsPasswordChange.value = false;
       // Never return to splash after a successful login attempt path.
       splashDone.value = true;
     } catch (exception) {
