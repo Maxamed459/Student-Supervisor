@@ -3077,3 +3077,155 @@ th {
   max-width: 380px;
 }
 
+/* Reports Screen Enhancements */
+.report-progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 110px;
+}
+
+.report-progress-track {
+  flex: 1;
+  height: 6px;
+  background: var(--color-soft-line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.report-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #10b981;
+  transition: width 0.3s ease;
+}
+
+.report-progress-fill.warn {
+  background: #f59e0b;
+}
+
+.report-progress-fill.danger {
+  background: #ef4444;
+}
+
+.report-progress-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-ink);
+  min-width: 36px;
+  text-align: right;
+}
+
+.report-pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-soft-line);
+}
+
+.report-pipeline-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+}
+
+.report-pipeline-item span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+}
+
+.report-pipeline-item strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--color-ink);
+}
+
+.report-pipeline-item small {
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.report-code-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--color-blue-soft);
+  color: var(--color-navy);
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+.report-overdue-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.report-ok-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.report-mailto-link {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.report-mailto-link:hover {
+  text-decoration: underline;
+  color: var(--color-navy);
+}
+
+@media print {
+  .app-sidebar,
+  .app-topbar,
+  .row-actions,
+  .pagination,
+  .table-toolbar,
+  .filter-controls {
+    display: none !important;
+  }
+
+  .app-frame {
+    display: block !important;
+  }
+
+  .content-canvas {
+    padding: 0 !important;
+  }
+
+  .surface-card {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+    break-inside: avoid;
+    margin-bottom: 20px !important;
+  }
+}
+
+
