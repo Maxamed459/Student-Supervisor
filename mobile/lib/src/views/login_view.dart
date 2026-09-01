@@ -5,10 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/auth_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/auth_field.dart';
+import '../widgets/ssms_brand_mark.dart';
 import '../widgets/ssms_chrome.dart';
 
-/// Layout structure mirrors a centered-brand + bottom rounded sheet login.
-/// Colors stay SSMS; no social login / forgot-password (not in the API).
+/// Mirrors web `LoginPage` — brand panel + login card, adapted for mobile.
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
 
@@ -20,7 +21,7 @@ class _LoginViewState extends State<LoginView> {
   final email = TextEditingController();
   final password = TextEditingController();
   bool hidePassword = true;
-  bool rememberMe = true;
+  bool rememberMe = false;
 
   @override
   void initState() {
@@ -31,7 +32,7 @@ class _LoginViewState extends State<LoginView> {
   Future<void> _loadRemembered() async {
     final prefs = await SharedPreferences.getInstance();
     final savedEmail = prefs.getString('ssms_remember_email');
-    final remember = prefs.getBool('ssms_remember_me') ?? true;
+    final remember = prefs.getBool('ssms_remember_me') ?? false;
     if (!mounted) return;
     setState(() {
       rememberMe = remember;
@@ -63,236 +64,175 @@ class _LoginViewState extends State<LoginView> {
   Widget build(BuildContext context) {
     final auth = Get.find<AuthController>();
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    final brandHeight = MediaQuery.sizeOf(context).height * 0.38;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark
+      value: SystemUiOverlayStyle.light
           .copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
         backgroundColor: SsmsColors.panel,
         resizeToAvoidBottomInset: true,
         body: GestureDetector(
           onTap: () => FocusScope.of(context).unfocus(),
-          child: SafeArea(
-            bottom: false,
-            child: Column(
-              children: [
-                const SizedBox(height: 28),
-                Text(
-                  'SSMS',
-                  textAlign: TextAlign.center,
-                  style: SsmsType.display.copyWith(
-                    color: SsmsColors.navy,
-                    fontSize: 34,
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                constraints: BoxConstraints(minHeight: brandHeight.clamp(220, 360)),
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  MediaQuery.paddingOf(context).top + 28,
+                  24,
+                  32,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      SsmsColors.navy,
+                      SsmsColors.brandMid,
+                      SsmsColors.navyDark,
+                    ],
+                    stops: [0, 0.46, 1],
                   ),
                 ),
-                const SizedBox(height: 28),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    decoration: const BoxDecoration(
-                      color: SsmsColors.paper,
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(36),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SsmsBrandMark(onDark: true),
+                    const SizedBox(height: 28),
+                    Text(
+                      'Student-supervisor management system',
+                      style: SsmsType.serifLg.copyWith(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w700,
+                        height: 1.04,
+                        color: Colors.white,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x140B1F33),
-                          blurRadius: 28,
-                          offset: Offset(0, -6),
-                        ),
-                      ],
                     ),
-                    child: ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        28,
-                        36,
-                        28,
-                        28 + bottomInset,
+                    const SizedBox(height: 12),
+                    Text(
+                      'Manage groups, supervisors, and project progress from one secure dashboard.',
+                      style: SsmsType.body.copyWith(
+                        color: const Color(0xE6B6C7E9),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 17,
+                        height: 1.5,
                       ),
-                      children: [
-                        Text(
-                          'Welcome to\nSSMS login now!',
-                          textAlign: TextAlign.center,
-                          style: SsmsType.serifLg.copyWith(
-                            fontSize: 30,
-                            height: 1.25,
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        _PillField(
-                          label: 'Email',
-                          hint: 'Enter your email',
-                          controller: email,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [AutofillHints.email],
-                          textInputAction: TextInputAction.next,
-                        ),
-                        const SizedBox(height: 18),
-                        _PillField(
-                          label: 'Password',
-                          hint: 'Enter your password',
-                          controller: password,
-                          obscure: hidePassword,
-                          autofillHints: const [AutofillHints.password],
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _submit(),
-                          suffix: IconButton(
-                            onPressed: () => setState(
-                              () => hidePassword = !hidePassword,
-                            ),
-                            icon: Icon(
-                              hidePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                              size: 20,
-                              color: SsmsColors.muted,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: Checkbox(
-                                value: rememberMe,
-                                onChanged: (value) => setState(
-                                  () => rememberMe = value ?? false,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Remember me',
-                              style: SsmsType.label.copyWith(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Obx(
-                          () => auth.error.value.isEmpty
-                              ? const SizedBox.shrink()
-                              : Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: SsmsErrorNote(auth.error.value),
-                                ),
-                        ),
-                        Obx(
-                          () => SizedBox(
-                            width: double.infinity,
-                            height: 54,
-                            child: FilledButton(
-                              style: FilledButton.styleFrom(
-                                backgroundColor: SsmsColors.navy,
-                                foregroundColor: Colors.white,
-                                disabledBackgroundColor:
-                                    const Color(0xFFCDD5DF),
-                                elevation: 0,
-                                shape: const StadiumBorder(),
-                                textStyle: SsmsType.button,
-                              ),
-                              onPressed: auth.loading.value ? null : _submit,
-                              child: Text(
-                                auth.loading.value ? 'Signing in' : 'Login',
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        Text(
-                          'Accounts are created by your administrator.',
-                          textAlign: TextAlign.center,
-                          style: SsmsType.meta.copyWith(fontSize: 13),
-                        ),
-                      ],
                     ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  color: SsmsColors.paper,
+                  child: ListView(
+                    padding: EdgeInsets.fromLTRB(24, 28, 24, 24 + bottomInset),
+                    children: [
+                      Text('Welcome back', style: SsmsType.display),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Sign in with your university supervision account.',
+                        style: SsmsType.body,
+                      ),
+                      const SizedBox(height: 24),
+                      AuthField(
+                        label: 'Email',
+                        hint: 'Enter your email address',
+                        controller: email,
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
+                        textInputAction: TextInputAction.next,
+                        prefixIcon: Icons.mail_outline_rounded,
+                      ),
+                      const SizedBox(height: 16),
+                      AuthField(
+                        label: 'Password',
+                        hint: 'Enter your password',
+                        controller: password,
+                        obscure: hidePassword,
+                        autofillHints: const [AutofillHints.password],
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _submit(),
+                        prefixIcon: Icons.lock_outline_rounded,
+                        suffix: IconButton(
+                          onPressed: () =>
+                              setState(() => hidePassword = !hidePassword),
+                          icon: Icon(
+                            hidePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                            size: 18,
+                            color: SsmsColors.inputIcon,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: Checkbox(
+                              value: rememberMe,
+                              onChanged: (value) => setState(
+                                () => rememberMe = value ?? false,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Remember me',
+                            style: SsmsType.body.copyWith(fontSize: 14),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => showSsmsInfoDialog(
+                              context: context,
+                              title: 'Forgot password?',
+                              message:
+                                  'Password resets are handled by your administrator. '
+                                  'Contact your supervisor or system admin to receive new credentials.',
+                            ),
+                            child: const Text('Forgot password?'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Obx(
+                        () => auth.error.value.isEmpty
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: SsmsErrorNote(auth.error.value),
+                              ),
+                      ),
+                      Obx(
+                        () => SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: auth.loading.value ? null : _submit,
+                            child: Text(
+                              auth.loading.value ? 'Logging in…' : 'Log in',
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Divider(
+                        height: 1,
+                        color: SsmsColors.line.withValues(alpha: 0.72),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _PillField extends StatelessWidget {
-  const _PillField({
-    required this.label,
-    required this.controller,
-    this.hint,
-    this.obscure = false,
-    this.keyboardType,
-    this.autofillHints,
-    this.textInputAction,
-    this.onSubmitted,
-    this.suffix,
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final String? hint;
-  final bool obscure;
-  final TextInputType? keyboardType;
-  final Iterable<String>? autofillHints;
-  final TextInputAction? textInputAction;
-  final ValueChanged<String>? onSubmitted;
-  final Widget? suffix;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: SsmsType.label.copyWith(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          obscureText: obscure,
-          keyboardType: keyboardType,
-          autofillHints: autofillHints,
-          textInputAction: textInputAction,
-          onSubmitted: onSubmitted,
-          cursorColor: SsmsColors.navy,
-          style: SsmsType.label.copyWith(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: true,
-            fillColor: SsmsColors.field,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 16,
-            ),
-            suffixIcon: suffix,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(999),
-              borderSide: const BorderSide(color: SsmsColors.line),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(999),
-              borderSide: const BorderSide(color: SsmsColors.line),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(999),
-              borderSide: const BorderSide(color: SsmsColors.navy, width: 1.4),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

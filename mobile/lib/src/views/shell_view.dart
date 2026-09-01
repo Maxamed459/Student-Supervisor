@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
+import '../config/navigation.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../utils/shell_navigation.dart';
 import '../widgets/ssms_nav.dart';
 import '../widgets/ssms_sidebar.dart';
 import 'admin/admin_groups_screen.dart';
@@ -14,17 +16,13 @@ import 'screens.dart';
 
 class _ShellDest {
   const _ShellDest({
-    required this.label,
-    required this.icon,
+    required this.spec,
     required this.page,
-    this.inBottomNav = true,
     this.badge = 0,
   });
 
-  final String label;
-  final IconData icon;
+  final SsmsNavSpec spec;
   final Widget page;
-  final bool inBottomNav;
   final int badge;
 }
 
@@ -40,142 +38,49 @@ class _ShellViewState extends State<ShellView> {
   int index = 0;
   late final Widget _adminUsersPage = const AdminUsersScreen();
 
+  Widget _pageForSpec(SsmsNavSpec spec, String role) {
+    if (spec.label == 'My Group') {
+      return role == 'supervisor'
+          ? const GroupsScreen()
+          : const MyGroupScreen();
+    }
+    return switch (spec.label) {
+      'Dashboard' => const DashboardScreen(),
+      'Users' => _adminUsersPage,
+      'Groups' => const AdminGroupsScreen(),
+      'Audit Logs' => const AuditLogsScreen(),
+      'Notifications' => const NotificationsScreen(),
+      'Profile' => const ProfileScreen(),
+      _ => const DashboardScreen(),
+    };
+  }
+
   List<_ShellDest> _destinations({
     required String role,
     required int unread,
   }) {
-    if (role == 'admin') {
-      return [
-        const _ShellDest(
-          label: 'Dashboard',
-          icon: Icons.dashboard_rounded,
-          page: DashboardScreen(),
-        ),
-        _ShellDest(
-          label: 'Users',
-          icon: Icons.people_outline_rounded,
-          page: _adminUsersPage,
-        ),
-        const _ShellDest(
-          label: 'Groups',
-          icon: Icons.menu_book_outlined,
-          page: AdminGroupsScreen(),
-        ),
-        const _ShellDest(
-          label: 'Audit Logs',
-          icon: Icons.verified_user_outlined,
-          page: AuditLogsScreen(),
-          inBottomNav: false,
-        ),
-        const _ShellDest(
-          label: 'Profile',
-          icon: Icons.person_outline_rounded,
-          page: ProfileScreen(),
-        ),
-      ];
-    }
-
-    if (role == 'supervisor') {
-      return [
-        const _ShellDest(
-          label: 'Dashboard',
-          icon: Icons.dashboard_rounded,
-          page: DashboardScreen(),
-        ),
-        const _ShellDest(
-          label: 'Guidelines',
-          icon: Icons.menu_book_outlined,
-          page: GuidelinesScreen(),
-        ),
-        const _ShellDest(
-          label: 'Papers',
-          icon: Icons.description_rounded,
-          page: SubmissionsScreen(),
-        ),
-        const _ShellDest(
-          label: 'Students',
-          icon: Icons.groups_rounded,
-          page: StudentsScreen(),
-        ),
-        const _ShellDest(
-          label: 'Groups',
-          icon: Icons.account_tree_rounded,
-          page: GroupsScreen(),
-          inBottomNav: false,
-        ),
-        _ShellDest(
-          label: 'Inbox',
-          icon: Icons.inbox_rounded,
-          page: const NotificationsScreen(),
-          inBottomNav: false,
-          badge: unread,
-        ),
-        const _ShellDest(
-          label: 'Profile',
-          icon: Icons.person_rounded,
-          page: ProfileScreen(),
-        ),
-      ];
-    }
-
     return [
-      const _ShellDest(
-        label: 'Dashboard',
-        icon: Icons.dashboard_rounded,
-        page: DashboardScreen(),
-      ),
-      const _ShellDest(
-        label: 'My Group',
-        icon: Icons.groups_outlined,
-        page: MyGroupScreen(),
-      ),
-      const _ShellDest(
-        label: 'Guidelines',
-        icon: Icons.menu_book_outlined,
-        page: GuidelinesScreen(),
-      ),
-      const _ShellDest(
-        label: 'Papers',
-        icon: Icons.description_outlined,
-        page: SubmissionsScreen(),
-      ),
-      _ShellDest(
-        label: 'Notifications',
-        icon: Icons.notifications_none_rounded,
-        page: const NotificationsScreen(),
-        inBottomNav: false,
-        badge: unread,
-      ),
-      const _ShellDest(
-        label: 'Profile',
-        icon: Icons.person_outline_rounded,
-        page: ProfileScreen(),
-      ),
+      for (final spec in ssmsNavForRole(role))
+        _ShellDest(
+          spec: spec,
+          page: _pageForSpec(spec, role),
+          badge: spec.badgeFromUnread ? unread : 0,
+        ),
     ];
   }
 
-  String _roleLabel(String role) {
-    return switch (role) {
-      'admin' => 'Admin Dashboard',
-      'supervisor' => 'Supervisor Dashboard',
-      _ => 'Student Dashboard',
-    };
+  void _goToLabel(String label) {
+    final dests = _destinations(
+      role: Get.find<AuthController>().user.value!.role,
+      unread: Get.find<DashboardController>().unreadCount.value,
+    );
+    final target = dests.indexWhere((dest) => dest.spec.label == label);
+    if (target >= 0) setState(() => index = target);
   }
 
-  int? _notificationsIndex(List<_ShellDest> dests) {
+  int? _indexForLabel(List<_ShellDest> dests, String label) {
     for (var i = 0; i < dests.length; i++) {
-      if (dests[i].label == 'Notifications' || dests[i].label == 'Inbox') {
-        return i;
-      }
-    }
-    return null;
-  }
-
-  int? _profileIndex(List<_ShellDest> dests) {
-    for (var i = 0; i < dests.length; i++) {
-      if (dests[i].label == 'Profile' || dests[i].label == 'You') {
-        return i;
-      }
+      if (dests[i].spec.label == label) return i;
     }
     return null;
   }
@@ -203,7 +108,14 @@ class _ShellViewState extends State<ShellView> {
   @override
   void initState() {
     super.initState();
+    ShellNavigation.bind(_goToLabel);
     Get.find<DashboardController>().load();
+  }
+
+  @override
+  void dispose() {
+    ShellNavigation.unbind();
+    super.dispose();
   }
 
   @override
@@ -229,34 +141,38 @@ class _ShellViewState extends State<ShellView> {
 
         final bottomIndices = <int>[
           for (var i = 0; i < dests.length; i++)
-            if (dests[i].inBottomNav) i,
+            if (dests[i].spec.inBottomNav) i,
         ];
         final bottomItems = [
           for (final i in bottomIndices)
             SsmsNavItem(
-              dests[i].label,
-              dests[i].icon,
+              dests[i].spec.label,
+              dests[i].spec.icon,
               badge: dests[i].badge,
             ),
         ];
         final bottomSelected = bottomIndices.indexOf(safeIndex);
-        final notifIndex = _notificationsIndex(dests);
-        final profileIndex = _profileIndex(dests);
+        final notifIndex = _indexForLabel(dests, 'Notifications');
+        final profileIndex = _indexForLabel(dests, 'Profile');
 
         return Scaffold(
           key: scaffoldKey,
           backgroundColor: SsmsColors.panel,
           drawer: SsmsSidebar(
             index: safeIndex,
-            roleLabel: _roleLabel(user.role),
+            roleLabel: ssmsRoleLabel(user.role),
             items: [
               for (final dest in dests)
-                (label: dest.label, icon: dest.icon, badge: dest.badge),
+                (
+                  label: dest.spec.label,
+                  icon: dest.spec.icon,
+                  badge: dest.badge,
+                ),
             ],
             onSelect: (value) => setState(() => index = value),
           ),
           appBar: AppBar(
-            backgroundColor: SsmsColors.paper,
+            backgroundColor: SsmsColors.panel,
             surfaceTintColor: Colors.transparent,
             titleSpacing: 0,
             leading: IconButton(
@@ -264,8 +180,12 @@ class _ShellViewState extends State<ShellView> {
               icon: const Icon(Icons.menu_rounded),
             ),
             title: Text(
-              dests[safeIndex].label,
-              style: SsmsType.label.copyWith(fontSize: 18),
+              dests[safeIndex].spec.label,
+              style: SsmsType.label.copyWith(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                height: 1.33,
+              ),
             ),
             actions: [
               IconButton(
@@ -285,7 +205,7 @@ class _ShellViewState extends State<ShellView> {
             ],
             bottom: const PreferredSize(
               preferredSize: Size.fromHeight(1),
-              child: Divider(height: 1, color: SsmsColors.hairline),
+              child: Divider(height: 1, color: SsmsColors.softLine),
             ),
           ),
           body: IndexedStack(

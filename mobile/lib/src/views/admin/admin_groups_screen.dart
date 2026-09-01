@@ -8,6 +8,7 @@ import '../../widgets/display.dart';
 import '../../widgets/ssms_chrome.dart';
 import 'admin_group_detail_screen.dart';
 import 'admin_sheets.dart';
+import '../group_workspace_screen.dart';
 
 Future<void> openAdminGroupDetail(BuildContext context, dynamic item) async {
   final groupId = idOf(item);
@@ -44,9 +45,9 @@ class AdminGroupsScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => showCreateGroupSheet(context),
-          backgroundColor: SsmsColors.navy,
+          backgroundColor: SsmsColors.navyDark,
           icon: const Icon(Icons.add_rounded),
-          label: const Text('New group'),
+          label: const Text('Create group'),
         ),
         body: RefreshIndicator(
           color: SsmsColors.navy,
@@ -55,8 +56,8 @@ class AdminGroupsScreen extends StatelessWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.only(bottom: 88),
             children: [
-              SsmsPageHead(
-                kicker: 'SSMS WORKSPACE',
+              const SsmsPageHead(
+                kicker: 'SSMS Workspace',
                 title: 'Groups',
                 detail:
                     'Groups are the shared workspace that connects students and supervisors.',
@@ -75,6 +76,11 @@ class AdminGroupsScreen extends StatelessWidget {
                         _AdminGroupCard(
                           item: item,
                           onView: () => openAdminGroupDetail(context, item),
+                          onWorkspace: () {
+                            final id = idOf(item);
+                            if (id.isEmpty) return;
+                            navigateToGroupWorkspace(context, groupId: id);
+                          },
                           onEdit: () {
                             final id = idOf(item);
                             if (id.isEmpty) return;
@@ -139,12 +145,14 @@ class _AdminGroupCard extends StatelessWidget {
   const _AdminGroupCard({
     required this.item,
     required this.onView,
+    required this.onWorkspace,
     required this.onEdit,
     required this.onDelete,
   });
 
   final dynamic item;
   final VoidCallback onView;
+  final VoidCallback onWorkspace;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -203,9 +211,14 @@ class _AdminGroupCard extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'View',
+            tooltip: 'Open workspace',
+            onPressed: onWorkspace,
+            icon: const Icon(Icons.open_in_new_rounded, color: SsmsColors.navy),
+          ),
+          IconButton(
+            tooltip: 'Manage members',
             onPressed: onView,
-            icon: const Icon(Icons.visibility_outlined, color: SsmsColors.navy),
+            icon: const Icon(Icons.people_outline_rounded, color: SsmsColors.navy),
           ),
           IconButton(
             tooltip: 'Edit',

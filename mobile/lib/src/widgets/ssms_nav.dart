@@ -72,7 +72,7 @@ class _Item extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
           color: selected ? SsmsColors.field : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(SsmsRadii.sm),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -80,7 +80,7 @@ class _Item extends StatelessWidget {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(item.icon, size: 22, color: color),
+                Icon(item.icon, size: 18, color: color),
                 if (item.badge > 0)
                   Positioned(
                     right: -9,
@@ -91,7 +91,7 @@ class _Item extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: SsmsColors.navy,
+                        color: SsmsColors.dangerSolid,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(

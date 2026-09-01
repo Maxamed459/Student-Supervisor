@@ -128,7 +128,7 @@ class _AdminGroupDetailScreenState extends State<AdminGroupDetailScreen> {
                     ),
                     if (admin.hasMultipleSupervisors) ...[
                       const SizedBox(height: 10),
-                      SsmsErrorNote(
+                      const SsmsErrorNote(
                         'Multiple supervisors detected. Use Change supervisor to keep exactly one.',
                       ),
                     ],

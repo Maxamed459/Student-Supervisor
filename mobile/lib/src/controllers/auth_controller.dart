@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/session_user.dart';
+import '../widgets/display.dart';
 import '../services/api_service.dart';
 import '../utils/password_validator.dart';
 
@@ -21,7 +22,7 @@ class AuthController extends GetxController {
   bool get isAuthenticated => user.value != null && !needsPasswordChange.value;
 
   static bool isSupportedRole(String role) =>
-      role == 'student' || role == 'supervisor' || role == 'admin';
+      role == 'student' || role == 'supervisor';
 
   @override
   Future<void> onInit() async {
@@ -89,7 +90,9 @@ class AuthController extends GetxController {
           SessionUser.fromJson(data['user'] as Map<String, dynamic>);
       if (!isSupportedRole(loggedIn.role)) {
         await api.logout();
-        error.value = 'Unsupported account role for this app.';
+        error.value = loggedIn.role == 'admin'
+            ? 'Admin accounts must sign in through the web app.'
+            : 'Unsupported account role for this app.';
         return;
       }
       user.value = loggedIn;
@@ -149,10 +152,26 @@ class AuthController extends GetxController {
     await prefs.remove('ssms_user');
   }
 
-  void applyProfile({dynamic supervisor, dynamic group}) {
+  void applyProfile({
+    dynamic supervisor,
+    dynamic group,
+    String? groupId,
+  }) {
     final current = user.value;
     if (current == null) return;
-    final next = current.copyWith(supervisor: supervisor, group: group);
+    String? nextGroupId = current.groupId;
+    if (groupId != null && groupId.trim().isNotEmpty) {
+      nextGroupId = groupId.trim();
+    }
+    if (group is Map) {
+      final resolved = idOf(group);
+      if (resolved.isNotEmpty) nextGroupId = resolved;
+    }
+    final next = current.copyWith(
+      supervisor: supervisor,
+      group: group,
+      groupId: nextGroupId,
+    );
     user.value = next;
     _persistUser(next);
   }

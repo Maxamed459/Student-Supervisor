@@ -1,14 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
 import '../utils/password_validator.dart';
+import 'dio_platform.dart';
 
 class ApiService {
   ApiService({String? baseUrl}) : baseUrl = baseUrl ?? ApiConfig.baseUrl;
@@ -23,10 +24,14 @@ class ApiService {
   Future<void> init() async {
     if (_ready) return;
     ApiConfig.validateForRuntime();
-    final dir = await getApplicationDocumentsDirectory();
-    _cookieJar = PersistCookieJar(
-      storage: FileStorage('${dir.path}/.cookies/'),
-    );
+    if (kIsWeb) {
+      _cookieJar = CookieJar();
+    } else {
+      final dir = await getApplicationDocumentsDirectory();
+      _cookieJar = PersistCookieJar(
+        storage: FileStorage('${dir.path}/.cookies/'),
+      );
+    }
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
@@ -39,6 +44,7 @@ class ApiService {
         validateStatus: (status) => status != null && status < 500,
       ),
     );
+    configureDioPlatform(_dio);
     _dio.interceptors.add(CookieManager(_cookieJar));
     _ready = true;
   }
@@ -77,7 +83,11 @@ class ApiService {
     );
     final user = data['user'] as Map<String, dynamic>? ?? {};
     final role = (user['role'] ?? '').toString();
-    if (role != 'student' && role != 'supervisor' && role != 'admin') {
+    if (role == 'admin') {
+      await _clearSession();
+      throw Exception('Admin accounts must sign in through the web app.');
+    }
+    if (role != 'student' && role != 'supervisor') {
       await _clearSession();
       throw Exception('Unsupported account role for this app.');
     }
@@ -180,14 +190,18 @@ class ApiService {
     );
   }
 
-  Future<Map<String, dynamic>?> getStudentSupervisor(String studentId) async {
-    final data = await _request(
+  Future<Map<String, dynamic>> getStudentSupervisor(String studentId) async {
+    return _request(
       method: 'GET',
       path: '/students/$studentId/supervisor',
     );
-    final supervisor = data['supervisor'];
-    if (supervisor is Map<String, dynamic>) return supervisor;
-    return null;
+  }
+
+  Future<Map<String, dynamic>> getStudentGroup(String studentId) async {
+    return _request(
+      method: 'GET',
+      path: '/students/$studentId/group',
+    );
   }
 
   Future<List<dynamic>> getMilestoneSubmissions(String milestoneId) async {
@@ -534,7 +548,7 @@ class ApiService {
 
   /// Documented Cloudinary flow: signature → multipart upload → attachment object.
   Future<Map<String, dynamic>> uploadFile({
-    required File file,
+    required Uint8List bytes,
     required String originalFilename,
     required String folder,
   }) async {
@@ -550,8 +564,8 @@ class ApiService {
     }
 
     final form = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        file.path,
+      'file': MultipartFile.fromBytes(
+        bytes,
         filename: originalFilename,
       ),
       'api_key': apiKey,

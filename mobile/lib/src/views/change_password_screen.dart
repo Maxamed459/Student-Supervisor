@@ -66,7 +66,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Widget build(BuildContext context) {
     final auth = Get.find<AuthController>();
     return Scaffold(
-      backgroundColor: widget.requiredChange ? Colors.white : SsmsColors.panel,
+      backgroundColor: SsmsColors.panel,
       appBar: widget.requiredChange
           ? null
           : AppBar(

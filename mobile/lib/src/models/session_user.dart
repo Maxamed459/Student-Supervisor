@@ -29,6 +29,7 @@ class SessionUser {
     String? fullName,
     String? phone,
     String? status,
+    String? groupId,
     bool? mustChangePassword,
     dynamic supervisor,
     dynamic group,
@@ -41,11 +42,21 @@ class SessionUser {
       status: status ?? this.status,
       phone: phone ?? this.phone,
       supervisorId: supervisorId,
-      groupId: groupId,
+      groupId: groupId ?? this.groupId,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       supervisor: supervisor ?? this.supervisor,
       group: group ?? this.group,
     );
+  }
+
+  static String? _refId(dynamic value) {
+    if (value == null) return null;
+    if (value is Map) {
+      final id = (value['_id'] ?? value['id'] ?? value[r'$oid'])?.toString().trim();
+      return (id == null || id.isEmpty || id == 'null') ? null : id;
+    }
+    final text = value.toString().trim();
+    return text.isEmpty || text == 'null' ? null : text;
   }
 
   factory SessionUser.fromJson(Map<String, dynamic> json) {
@@ -61,8 +72,8 @@ class SessionUser {
               ? 'inactive'
               : '',
       phone: json['phone']?.toString(),
-      supervisorId: json['supervisorId']?.toString(),
-      groupId: json['groupId']?.toString(),
+      supervisorId: _refId(json['supervisorId']),
+      groupId: _refId(json['groupId']),
       mustChangePassword: json['mustChangePassword'] == true,
       supervisor: json['supervisor'],
       group: json['group'],

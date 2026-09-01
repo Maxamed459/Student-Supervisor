@@ -5,11 +5,14 @@ import 'package:intl/intl.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import '../models/session_user.dart';
 import '../utils/audit_log_formatter.dart';
+import '../utils/shell_navigation.dart';
 import '../widgets/display.dart';
 import '../widgets/ssms_chrome.dart';
 import 'action_sheets.dart';
 import 'change_password_screen.dart';
+import 'group_workspace_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -39,9 +42,6 @@ class _AdminOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final admin = controller.adminDashboard.value;
-    final totals = admin?['totals'] is Map
-        ? Map<String, dynamic>.from(admin!['totals'] as Map)
-        : <String, dynamic>{};
     final activity = admin?['submissionActivity'] is Map
         ? Map<String, dynamic>.from(admin!['submissionActivity'] as Map)
         : <String, dynamic>{};
@@ -52,50 +52,54 @@ class _AdminOverview extends StatelessWidget {
       return field(user, const ['role']) == 'student' &&
           groupIdOf(user).isEmpty;
     }).length;
-    final studentsWithoutSupervisor = allUsers.where((user) {
-      if (field(user, const ['role']) != 'student') return false;
-      final supervisorId = user is Map ? user['supervisorId'] : null;
-      return supervisorId == null || supervisorId.toString().isEmpty;
+    final groupsWithoutSupervisor = controller.groups.where((group) {
+      final supervisors = group is Map ? group['supervisors'] : null;
+      if (supervisors is List) return supervisors.isEmpty;
+      return true;
     }).length;
     final inactiveUsers = allUsers.where((user) {
       return user is Map && user['isActive'] == false;
     }).length;
+    final studentCount = allUsers
+        .where((user) => field(user, const ['role']) == 'student')
+        .length;
+    final welcomeName =
+        Get.find<AuthController>().user.value?.fullName.split(' ').first ??
+            'there';
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 28),
       children: [
-        const SsmsPageHead(
-          kicker: 'SSMS WORKSPACE',
-          title: 'Overview',
-          detail: 'Current metrics for the academic term.',
+        SsmsDashboardHeader(
+          subtitle:
+              'Welcome back, $welcomeName. Have a look at any recent changes to your supervision workspace.',
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
-              _WebMetricCard(
-                value: '${totals['totalStudents'] ?? 0}',
-                label: 'Total Students',
-                detail: 'Registered student accounts',
-                icon: Icons.school_outlined,
-                tint: SsmsColors.blueSoft,
+              DashStatCard(
+                label: 'Groups',
+                value: '${controller.groups.length}',
+                tone: DashStatTone.blue,
+                linkLabel: 'View details',
+                onLink: () => ShellNavigation.go('Groups'),
               ),
               const SizedBox(height: 12),
-              _WebMetricCard(
-                value: '${totals['totalSupervisors'] ?? 0}',
-                label: 'Total Supervisors',
-                detail: 'Active supervisor accounts',
-                icon: Icons.supervisor_account_outlined,
-                tint: SsmsColors.mint,
+              DashStatCard(
+                label: 'Students',
+                value: '$studentCount',
+                tone: DashStatTone.green,
+                linkLabel: 'View details',
+                onLink: () => ShellNavigation.go('Users'),
               ),
               const SizedBox(height: 12),
-              _WebMetricCard(
-                value: '${totals['totalGroups'] ?? 0}',
-                label: 'Student Groups',
-                detail: 'Groups in the database',
-                icon: Icons.groups_outlined,
-                tint: SsmsColors.peach,
+              DashCtaCard(
+                text:
+                    'Create groups, assign supervisors, and manage student accounts from a single workspace.',
+                actionLabel: 'Manage groups',
+                onAction: () => ShellNavigation.go('Groups'),
               ),
             ],
           ),
@@ -135,9 +139,9 @@ class _AdminOverview extends StatelessWidget {
                   label: '$studentsWithoutGroup students without a group',
                   icon: Icons.group_off_outlined,
                 ),
-              if (studentsWithoutSupervisor > 0)
+              if (groupsWithoutSupervisor > 0)
                 _PendingAction(
-                  label: '$studentsWithoutSupervisor students without a supervisor',
+                  label: '$groupsWithoutSupervisor groups without a supervisor',
                   icon: Icons.person_off_outlined,
                 ),
               if (inactiveUsers > 0)
@@ -146,7 +150,7 @@ class _AdminOverview extends StatelessWidget {
                   icon: Icons.block_outlined,
                 ),
               if (studentsWithoutGroup == 0 &&
-                  studentsWithoutSupervisor == 0 &&
+                  groupsWithoutSupervisor == 0 &&
                   inactiveUsers == 0)
                 const SsmsEmpty(
                   title: 'All clear',
@@ -169,11 +173,18 @@ class _StudentOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progress = controller.progress.value;
-    final groupName =
-        field(user.group, const ['name', 'title'], fallback: 'Not assigned');
-    final groupCode = field(user.group, const ['code', 'term']);
-    final supervisorName =
-        field(user.supervisor, const ['fullName', 'name'], fallback: 'Not assigned');
+    final groupDetail = controller.groupDetail.value;
+    final groupName = field(
+      groupDetail ?? user.group,
+      const ['name', 'title'],
+      fallback: 'Not assigned',
+    );
+    final groupCode = field(groupDetail ?? user.group, const ['code', 'term']);
+    final supervisorName = field(
+      user.supervisor,
+      const ['fullName', 'name'],
+      fallback: 'Not assigned',
+    );
     final milestones = controller.milestones;
     final submissions = controller.submissions;
     final recent = controller.notifications.take(5).toList();
@@ -194,43 +205,43 @@ class _StudentOverview extends StatelessWidget {
       final status = field(item, const ['status'], fallback: 'pending');
       statusCounts[status] = (statusCounts[status] ?? 0) + 1;
     }
+    final welcomeName = user is SessionUser
+        ? user.fullName.split(' ').first
+        : field(user, const ['fullName'], fallback: 'there').split(' ').first;
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 28),
       children: [
-        const SsmsPageHead(
-          kicker: 'SSMS WORKSPACE',
-          title: 'Overview',
-          detail: 'Current metrics for the academic term.',
+        SsmsDashboardHeader(
+          subtitle:
+              'Welcome back, $welcomeName. Have a look at any recent changes to your supervision workspace.',
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             children: [
-              _WebMetricCard(
-                value: '${milestones.length}',
+              DashStatCard(
                 label: 'Milestones',
-                detail: 'Published milestones for your group',
-                icon: Icons.assignment_outlined,
-                tint: SsmsColors.blueSoft,
+                value: '${milestones.length}',
+                tone: DashStatTone.blue,
+                linkLabel: 'View details',
+                onLink: () => ShellNavigation.go('My Group'),
               ),
               const SizedBox(height: 12),
-              _WebMetricCard(
-                value: '${submissions.length}',
+              DashStatCard(
                 label: 'Submissions',
-                detail: 'Your uploaded versions',
-                icon: Icons.description_outlined,
-                tint: SsmsColors.mint,
+                value: '${submissions.length}',
+                tone: DashStatTone.green,
+                linkLabel: 'View details',
+                onLink: () => ShellNavigation.go('My Group'),
               ),
               const SizedBox(height: 12),
-              _WebMetricCard(
-                value: groupName,
-                label: 'Group',
-                detail: groupCode.isNotEmpty ? groupCode : 'Your assigned cohort',
-                icon: Icons.groups_outlined,
-                tint: SsmsColors.peach,
-                compactValue: true,
+              DashCtaCard(
+                text:
+                    'Submit your deliverables against published milestones and track supervisor feedback.',
+                actionLabel: 'Go to my group',
+                onAction: () => ShellNavigation.go('My Group'),
               ),
             ],
           ),
@@ -329,21 +340,49 @@ class _SupervisorOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final recent = controller.notifications.take(6).toList();
+    final pendingReviews = controller.submissions
+        .where((item) => field(item, const ['status']) == 'pending')
+        .length;
+    final welcomeName =
+        Get.find<AuthController>().user.value?.fullName.split(' ').first ??
+            'there';
+
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 28),
       children: [
-        const SsmsPageHead(
-          kicker: 'SSMS WORKSPACE',
-          title: 'Overview',
-          detail: 'Current metrics for the academic term.',
+        SsmsDashboardHeader(
+          subtitle:
+              'Welcome back, $welcomeName. Have a look at any recent changes to your supervision workspace.',
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: _MetricGrid.counts(
-            groups: controller.groups.length,
-            papers: controller.submissions.length,
-            dates: controller.milestones.length,
+          child: Column(
+            children: [
+              DashStatCard(
+                label: 'My Group',
+                value: '${controller.groups.length}',
+                tone: DashStatTone.blue,
+                linkLabel: 'View details',
+                onLink: () => ShellNavigation.go('My Group'),
+              ),
+              const SizedBox(height: 12),
+              DashStatCard(
+                label: 'Pending Reviews',
+                value: '$pendingReviews',
+                delta: pendingReviews > 0 ? '$pendingReviews awaiting' : null,
+                tone: DashStatTone.green,
+                linkLabel: 'View details',
+                onLink: () => ShellNavigation.go('My Group'),
+              ),
+              const SizedBox(height: 12),
+              DashCtaCard(
+                text:
+                    'Review student submissions, publish milestones, and share guidelines with your group.',
+                actionLabel: 'Open workspace',
+                onAction: () => ShellNavigation.go('My Group'),
+              ),
+            ],
           ),
         ),
         const SsmsSectionLabel('Recent Notifications'),
@@ -435,7 +474,7 @@ class SubmissionsScreen extends StatelessWidget {
           ? FloatingActionButton.extended(
               onPressed: () => showSubmitWorkSheet(context),
               icon: const Icon(Icons.upload_file_rounded),
-              label: Text('Submit'),
+              label: const Text('Submit'),
             )
           : null,
       builder: (controller) {
@@ -443,7 +482,8 @@ class SubmissionsScreen extends StatelessWidget {
         final needsRevision = canSubmitWork()
             ? items
                 .where(
-                  (item) => field(item, const ['status']) == 'changes_requested',
+                  (item) =>
+                      field(item, const ['status']) == 'changes_requested',
                 )
                 .toList()
             : const <dynamic>[];
@@ -470,7 +510,8 @@ class SubmissionsScreen extends StatelessWidget {
                     children: [
                       Text(
                         'Changes requested',
-                        style: SsmsType.label.copyWith(color: SsmsColors.danger),
+                        style:
+                            SsmsType.label.copyWith(color: SsmsColors.danger),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -569,7 +610,7 @@ class GuidelinesScreen extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 100),
           children: [
             SsmsPageHead(
-              kicker: 'SSMS WORKSPACE',
+              kicker: 'SSMS Workspace',
               title: 'Guidelines',
               detail: supervisor
                   ? 'Publish guidelines and attachments for your students to follow.'
@@ -602,8 +643,7 @@ class GuidelinesScreen extends StatelessWidget {
                         onSubmit: student
                             ? () => showSubmitWorkSheet(
                                   context,
-                                  milestoneId:
-                                      field(item, const ['_id', 'id']),
+                                  milestoneId: field(item, const ['_id', 'id']),
                                   headline: _submissionForMilestone(
                                             controller.submissions,
                                             field(item, const ['_id', 'id']),
@@ -639,7 +679,7 @@ class NotificationsScreen extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 28),
           children: [
             SsmsPageHead(
-              kicker: 'SSMS WORKSPACE',
+              kicker: 'SSMS Workspace',
               title: 'Notifications',
               detail: 'Notification center for supervision updates.',
               action: items.isEmpty
@@ -658,11 +698,12 @@ class NotificationsScreen extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${items.length} records',
-                      style: SsmsType.meta.copyWith(fontWeight: FontWeight.w600),
+                      style:
+                          SsmsType.meta.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                   if (controller.unreadCount.value > 0)
-                    SsmsStatusMark('unread'),
+                    const SsmsStatusMark('unread'),
                 ],
               ),
             ),
@@ -709,19 +750,45 @@ class NotificationsScreen extends StatelessWidget {
 class GroupsScreen extends StatelessWidget {
   const GroupsScreen({super.key});
 
+  String? _resolveSupervisorGroupId(
+    DashboardController controller,
+    SessionUser user,
+  ) {
+    if (controller.groups.length == 1) {
+      final id = idOf(controller.groups.first);
+      if (id.isNotEmpty) return id;
+    }
+    final fromUser = user.groupId?.trim() ?? idOf(user.group ?? const {});
+    if (fromUser.isNotEmpty) return fromUser;
+    for (final group in controller.groups) {
+      final id = idOf(group);
+      if (id.isNotEmpty) return id;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return _LiveBody(
       builder: (controller) {
+        final user = Get.find<AuthController>().user.value!;
         final items = controller.groups;
+        final workspaceGroupId = _resolveSupervisorGroupId(controller, user);
+        if (workspaceGroupId != null && (items.length <= 1 || items.isEmpty)) {
+          return GroupWorkspaceScreen(
+            groupId: workspaceGroupId,
+            embedded: true,
+          );
+        }
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: 28),
           children: [
             SsmsPageHead(
               kicker: items.isEmpty ? 'Cohorts' : '${items.length} groups',
-              title: 'Groups',
-              detail: 'Batches and members under your supervision.',
+              title: items.length <= 1 ? 'My Group' : 'My Groups',
+              detail:
+                  'Open a group workspace to manage guidelines, milestones, and submissions.',
             ),
             if (items.isEmpty)
               const SsmsEmpty(
@@ -750,165 +817,73 @@ class GroupsScreen extends StatelessWidget {
   }
 }
 
-class MyGroupScreen extends StatelessWidget {
+class MyGroupScreen extends StatefulWidget {
   const MyGroupScreen({super.key});
+
+  @override
+  State<MyGroupScreen> createState() => _MyGroupScreenState();
+}
+
+class _MyGroupScreenState extends State<MyGroupScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Get.find<DashboardController>().load();
+    });
+  }
+
+  String? _resolveGroupId(SessionUser user, DashboardController controller) {
+    final fromDetail = idOf(controller.groupDetail.value ?? const {});
+    if (fromDetail.isNotEmpty) return fromDetail;
+    final fromUser = user.groupId?.trim() ?? idOf(user.group ?? const {});
+    if (fromUser.isNotEmpty) return fromUser;
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<DashboardController>();
-    return Obx(() {
-      final user = Get.find<AuthController>().user.value!;
-      final group = controller.groupDetail.value ?? user.group;
-      final groupName = field(group, const ['name', 'title']);
-      final groupCode = field(group, const ['code', 'term']);
-      final hasGroup = groupName.isNotEmpty ||
-          (user.groupId != null && user.groupId!.isNotEmpty);
-      final members = controller.groupMembers;
-      var supervisors = members.where((m) {
-        return field(m, const ['role']) == 'supervisor';
-      }).toList();
-      var students = members.where((m) {
-        return field(m, const ['role']) == 'student';
-      }).toList();
-      if (supervisors.isEmpty && user.supervisor != null) {
-        supervisors = [user.supervisor];
-      }
-      if (students.isEmpty) {
-        students = [
-          {
-            'fullName': user.fullName,
-            'email': user.email,
-            'role': 'student',
-          },
-        ];
-      }
-      final guidelines = controller.milestones;
+    final auth = Get.find<AuthController>();
 
-      return RefreshIndicator(
-        color: SsmsColors.navy,
-        onRefresh: controller.load,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 28),
-          children: [
-            SsmsPageHead(
-              kicker: 'SSMS WORKSPACE',
-              title: groupCode.isNotEmpty && groupName.isNotEmpty
-                  ? '$groupCode — $groupName'
-                  : groupName.isNotEmpty
-                      ? groupName
-                      : 'My Group',
-              detail:
-                  'All group activity in one place — roster, guidelines, milestones, and submissions.',
-            ),
-            if (!hasGroup)
-              const SsmsEmpty(
+    return Obx(() {
+      final user = auth.user.value;
+      if (user == null) return const SizedBox.shrink();
+
+      if (controller.loading.value &&
+          controller.groupDetail.value == null &&
+          (user.groupId == null || user.groupId!.isEmpty)) {
+        return const Scaffold(
+          backgroundColor: Colors.transparent,
+          body: SsmsBusy(),
+        );
+      }
+
+      final groupId = _resolveGroupId(user, controller);
+      if (groupId == null || groupId.isEmpty) {
+        return RefreshIndicator(
+          color: SsmsColors.navy,
+          backgroundColor: SsmsColors.paper,
+          onRefresh: controller.load,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: const [
+              SsmsPageHead(
+                kicker: 'SSMS Workspace',
+                title: 'My Group',
+                detail: 'Your assigned group workspace.',
+              ),
+              SsmsEmpty(
                 title: 'No group assigned',
                 detail:
-                    'An admin assigns groups. Check back once you are placed.',
-              )
-            else ...[
-              const SsmsSectionLabel('Group Roster'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: SsmsCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('SUPERVISORS', style: SsmsType.kicker),
-                      const SizedBox(height: 10),
-                      if (supervisors.isEmpty && user.supervisor != null)
-                        _RosterCard(
-                          name: field(
-                            user.supervisor,
-                            const ['fullName', 'name'],
-                            fallback: 'Supervisor',
-                          ),
-                          email: field(user.supervisor, const ['email']),
-                        )
-                      else if (supervisors.isEmpty)
-                        Text(
-                          'No supervisor assigned',
-                          style: SsmsType.meta,
-                        )
-                      else
-                        for (final item in supervisors)
-                          _RosterCard(
-                            name: field(
-                              item,
-                              const ['fullName', 'name'],
-                              fallback: 'Supervisor',
-                            ),
-                            email: field(item, const ['email']),
-                          ),
-                      const SizedBox(height: 18),
-                      Text('STUDENTS', style: SsmsType.kicker),
-                      const SizedBox(height: 10),
-                      if (students.isEmpty)
-                        Text('No students listed', style: SsmsType.meta)
-                      else
-                        for (final item in students)
-                          _RosterCard(
-                            name: field(
-                              item,
-                              const ['fullName', 'name'],
-                              fallback: 'Student',
-                            ),
-                            email: field(item, const ['email']),
-                          ),
-                    ],
-                  ),
-                ),
-              ),
-              const SsmsSectionLabel('Guidelines'),
-              if (guidelines.isEmpty)
-                const SsmsEmpty(
-                  title: 'No guidelines',
-                  detail: 'Published guidelines will appear here.',
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: SsmsCard(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      children: [
-                        for (var i = 0; i < guidelines.length; i++) ...[
-                          _GuidelineRow(item: guidelines[i]),
-                          if (i < guidelines.length - 1)
-                            const Divider(
-                              height: 1,
-                              color: SsmsColors.hairline,
-                            ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              const SsmsSectionLabel('Milestones'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  children: [
-                    for (final item in guidelines) ...[
-                      _DateCard(
-                        item: item,
-                        onTap: () => _openMilestone(context, item),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    if (guidelines.isEmpty)
-                      const SsmsEmpty(
-                        title: 'No milestones',
-                        detail: 'Milestones will appear when published.',
-                      ),
-                  ],
-                ),
+                    'An admin assigns groups. Pull down to refresh after you are placed.',
               ),
             ],
-          ],
-        ),
-      );
+          ),
+        );
+      }
+
+      return GroupWorkspaceScreen(groupId: groupId, embedded: true);
     });
   }
 }
@@ -934,7 +909,8 @@ class SettingsScreen extends StatelessWidget {
             const SsmsPageHead(
               kicker: 'System',
               title: 'Settings',
-              detail: 'Global academic terms and chapter templates (read-only).',
+              detail:
+                  'Global academic terms and chapter templates (read-only).',
             ),
             if (settings == null)
               const SsmsEmpty(
@@ -946,16 +922,14 @@ class SettingsScreen extends StatelessWidget {
                 title: 'Academic terms',
                 empty: 'No terms configured.',
                 children: [
-                  for (final term in terms)
-                    _SettingsChip(term.toString()),
+                  for (final term in terms) _SettingsChip(term.toString()),
                 ],
               ),
               _SettingsBlock(
                 title: 'Submission categories',
                 empty: 'No categories configured.',
                 children: [
-                  for (final cat in categories)
-                    _SettingsChip(cat.toString()),
+                  for (final cat in categories) _SettingsChip(cat.toString()),
                 ],
               ),
               _SettingsBlock(
@@ -1058,10 +1032,12 @@ class ProgressScreen extends StatelessWidget {
                                       [
                                         if (field(item, const ['order'])
                                             .isNotEmpty)
-                                          'Order ${field(item, const ['order'])}',
+                                          'Order ${field(item, const [
+                                                'order'
+                                              ])}',
                                         if (formatStamp(field(item, const [
-                                              'lastSubmittedAt',
-                                            ])).isNotEmpty)
+                                          'lastSubmittedAt',
+                                        ])).isNotEmpty)
                                           formatStamp(field(item, const [
                                             'lastSubmittedAt',
                                           ])),
@@ -1139,15 +1115,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _ => 'Student',
       };
       final groupLabel = field(user.group, const ['name', 'title']);
-      final groupDisplay = groupLabel.isNotEmpty
-          ? groupLabel
-          : (user.groupId ?? 'Not assigned');
+      final groupDisplay =
+          groupLabel.isNotEmpty ? groupLabel : (user.groupId ?? 'Not assigned');
 
       return ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           const SsmsPageHead(
-            kicker: 'SSMS WORKSPACE',
+            kicker: 'SSMS Workspace',
             title: 'Profile',
             detail: 'Manage your account details and password.',
           ),
@@ -1178,7 +1153,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Edit profile', style: SsmsType.label.copyWith(fontSize: 18)),
+                  Text('Edit profile',
+                      style: SsmsType.label.copyWith(fontSize: 18)),
                   const SizedBox(height: 16),
                   Text('Full name', style: SsmsType.kicker),
                   const SizedBox(height: 8),
@@ -1271,7 +1247,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: OutlinedButton(
-                      onPressed: () => Get.to(() => const ChangePasswordScreen()),
+                      onPressed: () =>
+                          Get.to(() => const ChangePasswordScreen()),
                       child: const Text('Update password'),
                     ),
                   ),
@@ -1307,8 +1284,8 @@ class _GroupCard extends StatelessWidget {
               color: SsmsColors.field,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.account_tree_rounded,
-                color: SsmsColors.navy),
+            child:
+                const Icon(Icons.account_tree_rounded, color: SsmsColors.navy),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1381,7 +1358,8 @@ class _SettingsChip extends StatelessWidget {
         color: SsmsColors.field,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Text(label, style: SsmsType.label.copyWith(fontWeight: FontWeight.w600)),
+      child: Text(label,
+          style: SsmsType.label.copyWith(fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -1431,192 +1409,14 @@ class _LiveBody extends StatelessWidget {
   }
 }
 
-class _HomeHero extends StatelessWidget {
-  const _HomeHero({
-    required this.userName,
-    required this.role,
-    required this.unread,
-  });
-
-  final String userName;
-  final String role;
-  final int unread;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final roleLabel = switch (role) {
-      'admin' => 'Admin',
-      'supervisor' => 'Supervisor',
-      _ => 'Student',
-    };
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-      child: SsmsCard(
-        padding: const EdgeInsets.fromLTRB(18, 20, 18, 20),
-        child: Row(
-          children: [
-            Container(
-              width: 72,
-              height: 76,
-              decoration: BoxDecoration(
-                color: SsmsColors.field,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    DateFormat('d').format(now),
-                    style: SsmsType.serifLg.copyWith(fontSize: 32, height: 1),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    DateFormat('MMM').format(now).toUpperCase(),
-                    style: SsmsType.kicker.copyWith(fontSize: 10),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Hello, ${firstNameOf(userName)}',
-                    style: SsmsType.serifLg.copyWith(fontSize: 28),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    [
-                      roleLabel,
-                      if (unread > 0) '$unread unread',
-                    ].join(' · '),
-                    style: SsmsType.body.copyWith(fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DeadlineCard extends StatelessWidget {
-  const _DeadlineCard({required this.item});
-
-  final dynamic item;
-
-  @override
-  Widget build(BuildContext context) {
-    final due = asDate(field(item, const ['dueDate', 'dueAt']));
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [SsmsColors.navy, SsmsColors.navyDark],
-        ),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: item == null
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'NEXT DATE',
-                  style: SsmsType.kicker.copyWith(color: SsmsColors.blueSoft),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'No dates set',
-                  style: SsmsType.serifLg.copyWith(
-                    color: Colors.white,
-                    fontSize: 32,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Milestones will land here when the term is posted.',
-                  style: SsmsType.body.copyWith(
-                    color: SsmsColors.blueSoft,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'NEXT DATE',
-                  style: SsmsType.kicker.copyWith(color: SsmsColors.blueSoft),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  titleOf(item, fallback: 'Milestone'),
-                  style: SsmsType.serifLg.copyWith(
-                    color: Colors.white,
-                    fontSize: 28,
-                  ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  due == null ? 'Date to be confirmed' : relativeDue(due),
-                  style: SsmsType.body.copyWith(
-                    color: due != null && relativeDue(due).startsWith('Overdue')
-                        ? const Color(0xFFFFC9C2)
-                        : SsmsColors.blueSoft,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
 class _MetricGrid extends StatelessWidget {
   const _MetricGrid._(this.cells);
-  factory _MetricGrid.counts({
-    required int groups,
-    required int papers,
-    required int dates,
-  }) {
-    return _MetricGrid._([
-      ('$groups', 'Groups', SsmsColors.blueSoft),
-      ('$papers', 'Papers', SsmsColors.mint),
-      ('$dates', 'Dates', SsmsColors.peach),
-    ]);
-  }
 
   factory _MetricGrid.progress(Map<String, dynamic> progress) {
     return _MetricGrid._([
       ('${progress['totalMilestones'] ?? 0}', 'Total', SsmsColors.blueSoft),
       ('${progress['completed'] ?? 0}', 'Done', SsmsColors.mint),
       ('${progress['pending'] ?? 0}', 'Pending', SsmsColors.peach),
-    ]);
-  }
-
-  factory _MetricGrid.admin(
-    Map<String, dynamic> totals,
-    Map<String, dynamic>? activity,
-  ) {
-    return _MetricGrid._([
-      ('${totals['totalStudents'] ?? 0}', 'Students', SsmsColors.blueSoft),
-      ('${totals['totalSupervisors'] ?? 0}', 'Supervisors', SsmsColors.mint),
-      (
-        '${activity?['pending'] ?? totals['totalSubmissions'] ?? 0}',
-        activity != null ? 'Pending' : 'Papers',
-        SsmsColors.peach,
-      ),
     ]);
   }
 
@@ -1654,64 +1454,6 @@ class _MetricGrid extends StatelessWidget {
   }
 }
 
-class _WebMetricCard extends StatelessWidget {
-  const _WebMetricCard({
-    required this.value,
-    required this.label,
-    required this.detail,
-    required this.icon,
-    required this.tint,
-    this.compactValue = false,
-  });
-
-  final String value;
-  final String label;
-  final String detail;
-  final IconData icon;
-  final Color tint;
-  final bool compactValue;
-
-  @override
-  Widget build(BuildContext context) {
-    return SsmsCard(
-      color: SsmsColors.paper,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: SsmsType.kicker),
-                const SizedBox(height: 8),
-                Text(
-                  value,
-                  style: compactValue
-                      ? SsmsType.label.copyWith(fontSize: 20)
-                      : SsmsType.serifLg.copyWith(fontSize: 36, height: 1),
-                  maxLines: compactValue ? 2 : 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Text(detail, style: SsmsType.meta),
-              ],
-            ),
-          ),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: tint,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: SsmsColors.navy, size: 22),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SubmissionChart extends StatelessWidget {
   const _SubmissionChart({required this.activity});
 
@@ -1722,7 +1464,8 @@ class _SubmissionChart extends StatelessWidget {
     final approved = _asInt(activity['approved']);
     final pending = _asInt(activity['pending']);
     final changes = _asInt(activity['changesRequested']);
-    final maxVal = [approved, pending, changes, 1].reduce((a, b) => a > b ? a : b);
+    final maxVal =
+        [approved, pending, changes, 1].reduce((a, b) => a > b ? a : b);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1913,7 +1656,8 @@ class _ActivityRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(formatted.message, style: SsmsType.label.copyWith(fontSize: 14)),
+                Text(formatted.message,
+                    style: SsmsType.label.copyWith(fontSize: 14)),
                 const SizedBox(height: 4),
                 Text(formatted.timestamp, style: SsmsType.meta),
               ],
@@ -1952,7 +1696,8 @@ class _NotificationRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(displayTitle, style: SsmsType.label.copyWith(fontSize: 14)),
+                    Text(displayTitle,
+                        style: SsmsType.label.copyWith(fontSize: 14)),
                     if (type.isNotEmpty && title.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(type, style: SsmsType.kicker),
@@ -1968,7 +1713,7 @@ class _NotificationRow extends StatelessWidget {
               ),
               if (unread) ...[
                 const SizedBox(width: 8),
-                SsmsStatusMark('unread'),
+                const SsmsStatusMark('unread'),
               ],
             ],
           ),
@@ -1981,77 +1726,6 @@ class _NotificationRow extends StatelessWidget {
                 child: const Text('Mark read'),
               ),
             ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _RosterCard extends StatelessWidget {
-  const _RosterCard({required this.name, required this.email});
-
-  final String name;
-  final String email;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          SsmsInitials(name, size: 40),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: SsmsType.label.copyWith(fontSize: 14)),
-                if (email.isNotEmpty)
-                  Text(email, style: SsmsType.meta),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GuidelineRow extends StatelessWidget {
-  const _GuidelineRow({required this.item});
-
-  final dynamic item;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = titleOf(item, fallback: 'Guideline');
-    final description = field(item, const ['description']);
-    final published = formatStamp(field(item, const ['createdAt', 'publishedAt']));
-    final files = attachmentMaps(item);
-
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: SsmsType.label.copyWith(fontSize: 14)),
-          if (description.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(description, style: SsmsType.body.copyWith(fontSize: 14)),
-          ],
-          if (files.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            for (final file in files)
-              Text(
-                field(file, const ['originalFilename', 'publicId'],
-                    fallback: 'Attachment'),
-                style: SsmsType.meta.copyWith(color: SsmsColors.navy),
-              ),
-          ],
-          if (published.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('Published $published', style: SsmsType.meta),
           ],
         ],
       ),
@@ -2102,7 +1776,8 @@ class _AccountRow extends StatelessWidget {
                       ),
                     ),
                   )
-                : Text(value ?? '—', style: SsmsType.label.copyWith(fontSize: 14)),
+                : Text(value ?? '—',
+                    style: SsmsType.label.copyWith(fontSize: 14)),
           ),
         ],
       ),
@@ -2137,7 +1812,8 @@ class _PersonCard extends StatelessWidget {
           ),
           SsmsStatusMark(
             isAdmin()
-                ? prettyStatus(field(item, const ['role', 'status', 'isActive']))
+                ? prettyStatus(
+                    field(item, const ['role', 'status', 'isActive']))
                 : field(item, const ['status', 'isActive']),
           ),
         ],
@@ -2213,18 +1889,6 @@ class _PaperCard extends StatelessWidget {
   }
 }
 
-class _DateCard extends StatelessWidget {
-  const _DateCard({required this.item, required this.onTap});
-
-  final dynamic item;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return _GuidelineListCard(item: item, onOpen: onTap);
-  }
-}
-
 class _GuidelineListCard extends StatelessWidget {
   const _GuidelineListCard({
     required this.item,
@@ -2242,9 +1906,8 @@ class _GuidelineListCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final due = asDate(field(item, const ['dueDate', 'dueAt']));
     final files = attachmentMaps(item);
-    final status = submission != null
-        ? field(submission, const ['status'])
-        : '';
+    final status =
+        submission != null ? field(submission, const ['status']) : '';
     final needsRevision = status == 'changes_requested';
 
     return SsmsCard(
@@ -2257,73 +1920,74 @@ class _GuidelineListCard extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: SsmsColors.field,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: due == null
-                    ? Center(
-                        child: Text(
-                          '—',
-                          style:
-                              SsmsType.serif.copyWith(color: SsmsColors.muted),
-                        ),
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            DateFormat('d').format(due),
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: SsmsColors.field,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: due == null
+                      ? Center(
+                          child: Text(
+                            '—',
                             style: SsmsType.serif
-                                .copyWith(fontSize: 20, height: 1),
+                                .copyWith(color: SsmsColors.muted),
                           ),
-                          Text(
-                            DateFormat('MMM').format(due).toUpperCase(),
-                            style: SsmsType.kicker.copyWith(fontSize: 9),
-                          ),
-                        ],
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              DateFormat('d').format(due),
+                              style: SsmsType.serif
+                                  .copyWith(fontSize: 20, height: 1),
+                            ),
+                            Text(
+                              DateFormat('MMM').format(due).toUpperCase(),
+                              style: SsmsType.kicker.copyWith(fontSize: 9),
+                            ),
+                          ],
+                        ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        titleOf(item, fallback: 'Guideline'),
+                        style: SsmsType.label,
                       ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      titleOf(item, fallback: 'Guideline'),
-                      style: SsmsType.label,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      [
-                        due == null ? 'Guideline' : relativeDue(due),
-                        if (files.isNotEmpty) '${files.length} attachment(s)',
-                      ].join(' · '),
-                      style: SsmsType.meta.copyWith(
-                        color: due != null &&
-                                relativeDue(due).startsWith('Overdue')
-                            ? SsmsColors.danger
-                            : SsmsColors.muted,
+                      const SizedBox(height: 4),
+                      Text(
+                        [
+                          due == null ? 'Guideline' : relativeDue(due),
+                          if (files.isNotEmpty) '${files.length} attachment(s)',
+                        ].join(' · '),
+                        style: SsmsType.meta.copyWith(
+                          color: due != null &&
+                                  relativeDue(due).startsWith('Overdue')
+                              ? SsmsColors.danger
+                              : SsmsColors.muted,
+                        ),
                       ),
-                    ),
-                    if (status.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      SsmsStatusMark(status),
+                      if (status.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        SsmsStatusMark(status),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (canManageMilestones())
-                IconButton(
-                  onPressed: () => showEditGuidelineSheet(context, item),
-                  icon: const Icon(Icons.edit_rounded, color: SsmsColors.navy),
-                  tooltip: 'Edit',
-                ),
-            ],
-          ),
+                if (canManageMilestones())
+                  IconButton(
+                    onPressed: () => showEditGuidelineSheet(context, item),
+                    icon:
+                        const Icon(Icons.edit_rounded, color: SsmsColors.navy),
+                    tooltip: 'Edit',
+                  ),
+              ],
+            ),
           ),
           if (onSubmit != null) ...[
             const SizedBox(height: 12),
@@ -2422,45 +2086,6 @@ class _NoticeCard extends StatelessWidget {
   }
 }
 
-class _ProfileLine extends StatelessWidget {
-  const _ProfileLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    if (value.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 96,
-            child: Text(label.toUpperCase(), style: SsmsType.kicker),
-          ),
-          Expanded(child: Text(value, style: SsmsType.label)),
-        ],
-      ),
-    );
-  }
-}
-
-dynamic _nextDated(List<dynamic> items, List<String> keys) {
-  final dated = <(DateTime, dynamic)>[];
-  for (final item in items) {
-    final date = asDate(field(item, keys));
-    if (date != null) dated.add((date, item));
-  }
-  if (dated.isEmpty) return items.isEmpty ? null : items.first;
-  dated.sort((a, b) => a.$1.compareTo(b.$1));
-  final start = DateTime.now().subtract(const Duration(days: 1));
-  for (final entry in dated) {
-    if (!entry.$1.isBefore(start)) return entry.$2;
-  }
-  return dated.last.$2;
-}
-
 void _openPerson(BuildContext context, dynamic item) async {
   final name = field(item, const ['fullName', 'name'], fallback: 'Student');
   final id = field(item, const ['_id', 'id']);
@@ -2512,93 +2137,9 @@ void _openPerson(BuildContext context, dynamic item) async {
 }
 
 Future<void> _openGroup(BuildContext context, dynamic item) async {
-  final controller = Get.find<DashboardController>();
   final id = field(item, const ['_id', 'id']);
   if (id.isEmpty) return;
-  final data = await controller.loadGroupDetail(id);
-  if (!context.mounted) return;
-  final group = controller.groupDetail.value ??
-      (item is Map ? Map<String, dynamic>.from(item) : <String, dynamic>{});
-  final members = controller.groupMembers.toList();
-  if (data == null && members.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          controller.actionError.value.isEmpty
-              ? 'Could not load group.'
-              : controller.actionError.value,
-        ),
-      ),
-    );
-    return;
-  }
-  showSsmsSheet(
-    context: context,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          field(group, const ['name', 'title'], fallback: 'Group'),
-          style: SsmsType.title.copyWith(fontSize: 28),
-        ),
-        if (field(group, const ['term']).isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(field(group, const ['term']), style: SsmsType.meta),
-        ],
-        if (field(group, const ['description']).isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            field(group, const ['description']),
-            style: SsmsType.body.copyWith(color: SsmsColors.ink),
-          ),
-        ],
-        const SizedBox(height: 18),
-        Text(
-          members.isEmpty ? 'MEMBERS' : 'MEMBERS · ${members.length}',
-          style: SsmsType.kicker,
-        ),
-        if (members.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text('No members listed.', style: SsmsType.meta),
-          )
-        else
-          for (final member in members)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Row(
-                children: [
-                  SsmsInitials(
-                    field(member, const ['fullName', 'name'],
-                        fallback: 'Member'),
-                    size: 40,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          field(member, const ['fullName', 'name'],
-                              fallback: 'Member'),
-                          style: SsmsType.label,
-                        ),
-                        Text(
-                          [
-                            field(member, const ['email']),
-                            prettyStatus(field(member, const ['role'])),
-                          ].where((s) => s.isNotEmpty).join(' · '),
-                          style: SsmsType.meta,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-      ],
-    ),
-  );
+  await navigateToGroupWorkspace(context, groupId: id);
 }
 
 Future<void> _openMilestone(BuildContext context, dynamic item) async {
@@ -2677,7 +2218,7 @@ Future<void> _openMilestone(BuildContext context, dynamic item) async {
               showEditGuidelineSheet(context, item);
             },
             icon: const Icon(Icons.edit_rounded, size: 18),
-            label: Text('Edit date & details'),
+            label: const Text('Edit date & details'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
@@ -2687,8 +2228,7 @@ Future<void> _openMilestone(BuildContext context, dynamic item) async {
                     final ok = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: Text('Delete guideline?',
-                            style: SsmsType.serif),
+                        title: Text('Delete guideline?', style: SsmsType.serif),
                         content: Text(
                           'This also deletes submissions tied to this milestone.',
                           style: SsmsType.body,
@@ -2696,7 +2236,7 @@ Future<void> _openMilestone(BuildContext context, dynamic item) async {
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context, false),
-                            child: Text('Cancel'),
+                            child: const Text('Cancel'),
                           ),
                           TextButton(
                             onPressed: () => Navigator.pop(context, true),
@@ -2712,8 +2252,8 @@ Future<void> _openMilestone(BuildContext context, dynamic item) async {
                       ),
                     );
                     if (ok == true) {
-                      final deleted =
-                          await Get.find<DashboardController>().deleteGuideline(id);
+                      final deleted = await Get.find<DashboardController>()
+                          .deleteGuideline(id);
                       if (deleted && context.mounted) Navigator.pop(context);
                     }
                   },
@@ -2819,7 +2359,8 @@ Future<void> _openSubmission(BuildContext context, dynamic item) async {
                     Text('Feedback note', style: SsmsType.kicker),
                     const SizedBox(height: 6),
                     Text(
-                      field(feedbackNote, const ['content', 'message', 'comment']),
+                      field(feedbackNote,
+                          const ['content', 'message', 'comment']),
                       style: SsmsType.body.copyWith(color: SsmsColors.ink),
                     ),
                     if (formatStamp(
@@ -3063,7 +2604,8 @@ class _UploadVersionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final versionNo = field(version, const ['versionNumber', 'version']);
     final note = field(version, const ['note']);
-    final when = formatStamp(field(version, const ['submittedAt', 'createdAt']));
+    final when =
+        formatStamp(field(version, const ['submittedAt', 'createdAt']));
     final rawFiles = version['files'];
     final files = rawFiles is List
         ? rawFiles
@@ -3151,34 +2693,17 @@ class _CommentRow extends StatelessWidget {
   }
 }
 
-Future<void> _confirmSignOut(BuildContext context, AuthController auth) async {
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text('Sign out?', style: SsmsType.serif),
-        content: Text(
-          'You will need your account to come back in.',
-          style: SsmsType.body,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Stay'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(
-              'Sign out',
-              style: SsmsType.button.copyWith(
-                color: SsmsColors.navy,
-                fontSize: 14,
-              ),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-  if (ok == true) await auth.logout();
+Future<void> openMilestoneDetail(BuildContext context, dynamic item) =>
+    _openMilestone(context, item);
+
+Future<void> openSubmissionDetail(BuildContext context, dynamic item) =>
+    _openSubmission(context, item);
+
+Future<void> openGroupWorkspaceFromItem(
+  BuildContext context,
+  dynamic item,
+) async {
+  final id = field(item, const ['_id', 'id']);
+  if (id.isEmpty) return;
+  await navigateToGroupWorkspace(context, groupId: id);
 }

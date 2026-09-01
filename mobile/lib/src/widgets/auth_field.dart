@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'ssms_chrome.dart';
 
+/// Web `Field` component — label + themed input.
 class AuthField extends StatelessWidget {
   const AuthField({
     super.key,
@@ -15,6 +17,8 @@ class AuthField extends StatelessWidget {
     this.onSubmitted,
     this.suffix,
     this.hint,
+    this.error,
+    this.prefixIcon,
   });
 
   final String label;
@@ -27,33 +31,31 @@ class AuthField extends StatelessWidget {
   final ValueChanged<String>? onSubmitted;
   final Widget? suffix;
   final String? hint;
+  final String? error;
+  final IconData? prefixIcon;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: SsmsType.label.copyWith(fontSize: 15)),
-        const SizedBox(height: 10),
-        TextField(
-          controller: controller,
-          focusNode: focusNode,
-          obscureText: obscure,
-          keyboardType: keyboardType,
-          autofillHints: autofillHints,
-          textInputAction: textInputAction,
-          onSubmitted: onSubmitted,
-          cursorColor: SsmsColors.ink,
-          style: SsmsType.label.copyWith(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-          decoration: InputDecoration(
-            hintText: hint ?? label,
-            suffixIcon: suffix,
-          ),
+    return SsmsField(
+      label: label,
+      error: error,
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        obscureText: obscure,
+        keyboardType: keyboardType,
+        autofillHints: autofillHints,
+        textInputAction: textInputAction,
+        onSubmitted: onSubmitted,
+        style: SsmsType.label.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          hintText: hint,
+          prefixIcon: prefixIcon == null
+              ? null
+              : Icon(prefixIcon, size: 16, color: SsmsColors.inputIcon),
+          suffixIcon: suffix,
         ),
-      ],
+      ),
     );
   }
 }

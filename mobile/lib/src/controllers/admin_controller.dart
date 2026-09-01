@@ -118,12 +118,7 @@ class AdminController extends GetxController {
       allStudents.where((student) => groupIdOf(student).isEmpty),
     );
 
-    availableSupervisors.assignAll(
-      allSupervisors.where((supervisor) {
-        final supervisorGroupId = groupIdOf(supervisor);
-        return supervisorGroupId.isEmpty || supervisorGroupId == groupId;
-      }),
-    );
+    availableSupervisors.assignAll(allSupervisors);
   }
 
   Future<bool> createGroup({

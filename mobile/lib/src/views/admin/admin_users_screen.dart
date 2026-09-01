@@ -49,7 +49,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       backgroundColor: Colors.transparent,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => showCreateUserMenu(context),
-        backgroundColor: SsmsColors.navy,
+        backgroundColor: SsmsColors.navyDark,
         icon: const Icon(Icons.person_add_rounded),
         label: const Text('Create user'),
       ),
@@ -65,10 +65,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             padding: const EdgeInsets.only(bottom: 88),
             children: [
               SsmsPageHead(
-                kicker: 'SSMS WORKSPACE',
+                kicker: 'SSMS Workspace',
                 title: _pageTitle,
                 detail:
-                    'Create, edit, deactivate, or remove accounts. Use filters to view students, supervisors, or admins.',
+                    'Create, edit, deactivate, or remove accounts. Group membership is managed from the Groups screen.',
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),

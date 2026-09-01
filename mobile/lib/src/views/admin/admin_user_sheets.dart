@@ -20,23 +20,7 @@ Widget adminUserActionMessages(AdminUsersController controller) {
           SsmsErrorNote(err),
           const SizedBox(height: 12),
         ],
-        if (ok.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEFBF3),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFC8EBD5)),
-            ),
-            child: Text(
-              ok,
-              style: SsmsType.body.copyWith(
-                color: SsmsColors.accent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+        if (ok.isNotEmpty) SsmsSuccessNote(ok),
         if (ok.isNotEmpty) const SizedBox(height: 12),
       ],
     );
@@ -569,7 +553,7 @@ class _UserDetailFormState extends State<_UserDetailForm> {
         Text('GROUP', style: SsmsType.kicker),
         DropdownButtonFormField<String?>(
           isExpanded: true,
-          value: selectedGroupId,
+          initialValue: selectedGroupId,
           decoration: const InputDecoration(hintText: 'No group assigned'),
           items: [
             const DropdownMenuItem<String?>(
@@ -592,7 +576,7 @@ class _UserDetailFormState extends State<_UserDetailForm> {
           Text('SUPERVISOR', style: SsmsType.kicker),
           DropdownButtonFormField<String?>(
             isExpanded: true,
-            value: selectedSupervisorId,
+            initialValue: selectedSupervisorId,
             decoration: const InputDecoration(hintText: 'No supervisor assigned'),
             items: [
               const DropdownMenuItem<String?>(

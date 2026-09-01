@@ -18,12 +18,7 @@ class StudentSupervisorMobileApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildSsmsTheme(),
       defaultTransition: Transition.fadeIn,
-      builder: (context, child) {
-        return DefaultTextStyle(
-          style: SsmsType.root,
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
+      builder: (context, child) => child ?? const SizedBox.shrink(),
       home: GetX<AuthController>(
         builder: (controller) {
           if (!controller.splashDone.value) {

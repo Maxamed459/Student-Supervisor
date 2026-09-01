@@ -81,18 +81,19 @@ class SsmsSidebar extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(999),
+                      color: const Color(0x1AD8E7FF),
+                      borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.15),
+                        color: const Color(0x2ED8E7FF),
                       ),
                     ),
                     child: Text(
                       roleLabel,
                       style: SsmsType.kicker.copyWith(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 10,
-                        letterSpacing: 0.4,
+                        color: const Color(0xFFD8E7FF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
                       ),
                     ),
                   ),
@@ -109,39 +110,29 @@ class SsmsSidebar extends StatelessWidget {
                   final selected = i == index;
                   return Material(
                     color: selected
-                        ? Colors.white.withValues(alpha: 0.12)
+                        ? const Color(0x29D8E7FF)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(SsmsRadii.sm),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(SsmsRadii.sm),
                       onTap: () {
                         Navigator.pop(context);
                         onSelect(i);
                       },
                       child: Container(
-                        decoration: selected
-                            ? BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border(
-                                  left: BorderSide(
-                                    color: SsmsColors.blueSoft,
-                                    width: 3,
-                                  ),
-                                ),
-                              )
-                            : null,
+                        constraints: const BoxConstraints(minHeight: 42),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
+                          horizontal: 12,
+                          vertical: 10,
                         ),
                         child: Row(
                           children: [
                             Icon(
                               item.icon,
-                              size: 20,
+                              size: 18,
                               color: selected
                                   ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.55),
+                                  : const Color(0xD1D8E7FF),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -150,29 +141,37 @@ class SsmsSidebar extends StatelessWidget {
                                 style: SsmsType.label.copyWith(
                                   color: selected
                                       ? Colors.white
-                                      : Colors.white.withValues(alpha: 0.65),
+                                      : const Color(0xD1D8E7FF),
                                   fontSize: 14,
-                                  fontWeight: selected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
                             if (item.badge > 0)
                               Container(
+                                constraints: const BoxConstraints(minWidth: 16),
+                                height: 16,
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
+                                  horizontal: 4,
                                 ),
+                                alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: SsmsColors.danger,
+                                  color: SsmsColors.dangerSolid,
                                   borderRadius: BorderRadius.circular(999),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.white,
+                                      spreadRadius: 0,
+                                      blurRadius: 0,
+                                    ),
+                                  ],
                                 ),
                                 child: Text(
                                   item.badge > 9 ? '9+' : '${item.badge}',
                                   style: SsmsType.kicker.copyWith(
                                     color: Colors.white,
                                     fontSize: 10,
+                                    fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               ),
@@ -240,24 +239,36 @@ class SsmsShellActions extends StatelessWidget {
           onPressed: onNotifications,
           icon: Badge(
             isLabelVisible: unread > 0,
-            label: Text(unread > 9 ? '9+' : '$unread'),
-            child: const Icon(Icons.notifications_none_rounded),
+            backgroundColor: SsmsColors.dangerSolid,
+            label: Text(
+              unread > 9 ? '9+' : '$unread',
+              style: SsmsType.kicker.copyWith(
+                color: Colors.white,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            child: const Icon(Icons.notifications_none_rounded, size: 18),
           ),
         ),
         IconButton(
           onPressed: onProfile,
           icon: CircleAvatar(
             radius: 16,
-            backgroundColor: SsmsColors.field,
+            backgroundColor: SsmsColors.avatarBg,
             child: Text(
               initial,
-              style: SsmsType.label.copyWith(fontSize: 13, color: SsmsColors.ink),
+              style: SsmsType.label.copyWith(
+                fontSize: 13,
+                color: SsmsColors.navy,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ),
         IconButton(
           onPressed: () => auth.logout(),
-          icon: const Icon(Icons.logout_rounded),
+          icon: const Icon(Icons.logout_rounded, size: 18),
           tooltip: 'Sign out',
         ),
         const SizedBox(width: 4),

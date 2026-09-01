@@ -17,9 +17,17 @@ Future<bool> showAdminConfirmDialog({
 }) async {
   final result = await showDialog<bool>(
     context: context,
+    barrierColor: SsmsColors.navy.withValues(alpha: 0.36),
     builder: (context) => AlertDialog(
       backgroundColor: SsmsColors.paper,
-      title: Text(title, style: SsmsType.label.copyWith(fontSize: 18)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(SsmsRadii.lg),
+        side: const BorderSide(color: SsmsColors.softLine),
+      ),
+      title: Text(
+        title,
+        style: SsmsType.label.copyWith(fontSize: 22, fontWeight: FontWeight.w900),
+      ),
       content: Text(message, style: SsmsType.body),
       actions: [
         TextButton(
@@ -54,7 +62,7 @@ Widget _groupContextBanner({
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
       color: SsmsColors.blueSoft,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(SsmsRadii.md),
       border: Border.all(color: SsmsColors.hairline),
     ),
     child: Column(
@@ -86,23 +94,7 @@ Widget _actionMessages(AdminController controller) {
           SsmsErrorNote(err),
           const SizedBox(height: 12),
         ],
-        if (ok.isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEFBF3),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFC8EBD5)),
-            ),
-            child: Text(
-              ok,
-              style: SsmsType.body.copyWith(
-                color: SsmsColors.accent,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+        if (ok.isNotEmpty) SsmsSuccessNote(ok),
         if (ok.isNotEmpty) const SizedBox(height: 12),
       ],
     );
@@ -253,7 +245,7 @@ class _CreateGroupWizardState extends State<_CreateGroupWizard> {
         else
           DropdownButtonFormField<String>(
             isExpanded: true,
-            value: createNewSupervisor
+            initialValue: createNewSupervisor
                 ? null
                 : (selectedSupervisorId?.isEmpty == true
                     ? null
@@ -321,7 +313,7 @@ class _CreateGroupWizardState extends State<_CreateGroupWizard> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: SsmsColors.blueSoft,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(SsmsRadii.md),
             border: Border.all(color: SsmsColors.hairline),
           ),
           child: Column(
@@ -508,9 +500,7 @@ Future<void> showChangeSupervisorSheet(
       builder: (context, setState) {
         final assignable = controller.availableSupervisors.where((item) {
           final id = field(item, const ['_id', 'id']);
-          final supervisorGroupId = groupIdOf(item);
-          return id != currentSupervisorId &&
-              (supervisorGroupId.isEmpty || supervisorGroupId == groupId);
+          return id != currentSupervisorId;
         }).toList();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,7 +524,7 @@ Future<void> showChangeSupervisorSheet(
             else
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: selectedSupervisorId?.isEmpty == true
+                initialValue: selectedSupervisorId?.isEmpty == true
                     ? null
                     : selectedSupervisorId,
                 decoration: const InputDecoration(hintText: 'Select supervisor'),
@@ -703,9 +693,7 @@ class _EditGroupFormState extends State<_EditGroupForm> {
               fallback: 'Supervisor');
       final assignableSupervisors = controller.availableSupervisors.where((item) {
         final id = idOf(item);
-        final itemGroupId = groupIdOf(item);
-        return id != supervisorId &&
-            (itemGroupId.isEmpty || itemGroupId == widget.groupId);
+        return id != supervisorId;
       }).toList();
       final busy = controller.actionLoading.value;
 
@@ -807,7 +795,7 @@ class _EditGroupFormState extends State<_EditGroupForm> {
             else
               DropdownButtonFormField<String>(
                 isExpanded: true,
-                value: selectedSupervisorId,
+                initialValue: selectedSupervisorId,
                 decoration:
                     const InputDecoration(hintText: 'Select supervisor'),
                 items: [
@@ -861,7 +849,7 @@ class _EditGroupFormState extends State<_EditGroupForm> {
           ],
           if (controller.hasMultipleSupervisors) ...[
             const SizedBox(height: 10),
-            SsmsErrorNote(
+            const SsmsErrorNote(
               'Multiple supervisors detected. Use Change supervisor to keep exactly one.',
             ),
           ],
@@ -946,7 +934,7 @@ class _EditGroupFormState extends State<_EditGroupForm> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: selectedStudentId,
+              initialValue: selectedStudentId,
               decoration: const InputDecoration(hintText: 'Select student'),
               items: [
                 for (final item in controller.unassignedStudents)
@@ -1053,16 +1041,15 @@ Future<void> showAddSupervisorSheet(
     }
     return;
   }
-  final fullName = TextEditingController();
-  final email = TextEditingController();
-  final phone = TextEditingController();
   String? selectedSupervisorId;
 
   await showSsmsSheet(
     context: context,
     onClose: controller.clearMessages,
-    child: StatefulBuilder(
-      builder: (context, setState) {
+    child: SsmsSheetTextFields(
+      builder: (context, fullName, email, phone) {
+        return StatefulBuilder(
+          builder: (context, setState) {
         final assignable = controller.availableSupervisors
             .where((item) => groupIdOf(item).isEmpty)
             .toList();
@@ -1195,10 +1182,11 @@ Future<void> showAddSupervisorSheet(
             }),
           ],
         );
+          },
+        );
       },
     ),
   );
-  disposeAfterSheet([fullName, email, phone]);
 }
 
 Future<void> showAddStudentSheet(
@@ -1210,16 +1198,15 @@ Future<void> showAddStudentSheet(
 }) async {
   final controller = Get.find<AdminController>();
   controller.clearMessages();
-  final fullName = TextEditingController();
-  final email = TextEditingController();
-  final phone = TextEditingController();
   String? selectedStudentId;
 
   await showSsmsSheet(
     context: context,
     onClose: controller.clearMessages,
-    child: StatefulBuilder(
-      builder: (context, setState) {
+    child: SsmsSheetTextFields(
+      builder: (context, fullName, email, phone) {
+        return StatefulBuilder(
+          builder: (context, setState) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1361,10 +1348,11 @@ Future<void> showAddStudentSheet(
             }),
           ],
         );
+          },
+        );
       },
     ),
   );
-  disposeAfterSheet([fullName, email, phone]);
 }
 
 Future<void> showImportStudentsSheet(

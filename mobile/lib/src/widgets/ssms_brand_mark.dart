@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
+/// Mirrors web `BrandMark` — logo image + SSMS wordmark.
 class SsmsBrandMark extends StatelessWidget {
   const SsmsBrandMark({
     super.key,
@@ -15,27 +16,40 @@ class SsmsBrandMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mark = onDark ? Colors.white : SsmsColors.navy;
-    final quiet = onDark ? SsmsColors.blueSoft : SsmsColors.muted;
+    final quiet = onDark
+        ? SsmsColors.blueSoft.withValues(alpha: 0.78)
+        : SsmsColors.muted;
+    final symbolSize = compact ? 38.0 : 44.0;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: compact ? 28 : 32,
-          height: compact ? 28 : 32,
-          alignment: Alignment.center,
+          width: symbolSize,
+          height: symbolSize,
           decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(SsmsRadii.md),
             border: Border.all(
-              color: mark.withValues(alpha: onDark ? 0.55 : 1),
-              width: 1,
+              color: onDark
+                  ? SsmsColors.blueSoft.withValues(alpha: 0.34)
+                  : SsmsColors.line,
             ),
+            color: onDark
+                ? Colors.white.withValues(alpha: 0.02)
+                : SsmsColors.paper,
           ),
-          child: Text(
-            'S',
-            style: SsmsType.serif.copyWith(
-              color: mark,
-              fontSize: compact ? 18 : 20,
-              height: 1,
-              fontStyle: FontStyle.italic,
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset(
+            'assets/images/logo1.jpeg',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Center(
+              child: Text(
+                'S',
+                style: SsmsType.label.copyWith(
+                  color: mark,
+                  fontSize: compact ? 18 : 20,
+                ),
+              ),
             ),
           ),
         ),
@@ -45,21 +59,21 @@ class SsmsBrandMark extends StatelessWidget {
           children: [
             Text(
               'SSMS',
-              style: SsmsType.serif.copyWith(
+              style: SsmsType.label.copyWith(
                 color: mark,
                 fontSize: compact ? 20 : 22,
+                fontWeight: FontWeight.w800,
                 height: 1,
-                letterSpacing: 0.4,
               ),
             ),
             if (!compact) ...[
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
-                'SUPERVISION',
+                'Academic Supervision',
                 style: SsmsType.kicker.copyWith(
                   color: quiet,
-                  fontSize: 9,
-                  letterSpacing: 1.8,
+                  fontSize: 10,
+                  letterSpacing: 0,
                 ),
               ),
             ],

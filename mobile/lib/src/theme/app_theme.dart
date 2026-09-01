@@ -2,24 +2,90 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// Design tokens aligned with `client/src/index.css`.
 class SsmsColors {
-  static const ink = Color(0xFF0F172A);
-  static const muted = Color(0xFF64748B);
-  static const navy = Color(0xFF0B1F33);
-  static const navyDark = Color(0xFF061525);
-  static const panel = Color(0xFFF3F5F8);
-  static const field = Color(0xFFF1F4F8);
-  static const line = Color(0xFFE2E8F0);
-  static const hairline = Color(0xFFE8EDF3);
-  static const blueSoft = Color(0xFFDCE8F5);
-  static const mint = Color(0xFFDFF5EA);
-  static const accent = Color(0xFF16A34A);
-  static const danger = Color(0xFFDC2626);
+  static const ink = Color(0xFF171B22);
+  static const muted = Color(0xFF59616F);
+  static const navy = Color(0xFF071B33);
+  static const navyDark = Color(0xFF000711);
+  static const navyHover = Color(0xFF06101F);
+  static const panel = Color(0xFFF6FAFF);
+  static const field = Color(0xFFFBFDFF);
+  static const line = Color(0xFFC9D0DC);
+  static const softLine = Color(0xFFEDF3FB);
+  static const blueSoft = Color(0xFFD8E7FF);
+  static const danger = Color(0xFFBA1A1A);
+  static const success = Color(0xFF126D3C);
+  static const successBg = Color(0xFFE4F3EB);
+  static const dangerBg = Color(0xFFFDECEC);
+  static const dangerSolid = Color(0xFFDC2626);
+  static const dangerSolidHover = Color(0xFFB91C1C);
+  static const dangerSoftBg = Color(0xFFFEF2F2);
+  static const dangerSoftBorder = Color(0xFFFECACA);
+  static const formErrorBg = Color(0xFFFFF4F4);
+  static const badgeDefaultBg = Color(0xFFEEF3FA);
+  static const badgeDefaultText = Color(0xFF293138);
+  static const placeholder = Color(0xFF9AA2AF);
+  static const inputIcon = Color(0xFF6A7381);
+  static const avatarBg = Color(0xFFE5E2E1);
+  static const brandSubtitle = Color(0xB6B6C7E9); // rgba(182,199,233,0.9) on navy
+  static const brandMid = Color(0xFF09213F);
+  static const successNoticeBg = Color(0xFFEEFBF3);
+  static const successNoticeBorder = Color(0xFFC8EBD5);
+  static const linkBlue = Color(0xFF2563EB);
+
+  // Dashboard stat card tones — `.dash-stat-card--*`
+  static const statBlueBg = Color(0xFFEEF2FF);
+  static const statBlueLabel = Color(0xFF1E3A8A);
+  static const statBlueLink = Color(0xFF2563EB);
+  static const statGreenBg = Color(0xFFECFDF5);
+  static const statGreenLabel = Color(0xFF065F46);
+  static const statGreenLink = Color(0xFF059669);
+  static const statPeachBg = Color(0xFFFFF7ED);
+  static const statPeachLink = Color(0xFFEA580C);
+  static const statCtaText = Color(0xFF374151);
+
+  // Chart / activity
+  static const chartBarLight = Color(0xFF7DD3FC);
+  static const chartBarDark = Color(0xFF2563EB);
+  static const chartGrid = Color(0xFFEDF2F7);
+
+  static const shadowSurface = Color(0x0F071B33);
+  static const shadowModal = Color(0x3D071B33); // rgba(7,27,51,0.24)
   static const paper = Color(0xFFFFFFFF);
-  static const peach = Color(0xFFFFE8D9);
+
+  // Legacy aliases
+  static const hairline = softLine;
+  static const accent = success;
+  static const mint = successBg;
+  static const peach = dangerBg;
 }
 
-/// Global typography — Plus Jakarta Sans only (`google_fonts`).
+class SsmsRadii {
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+}
+
+class SsmsShadows {
+  static const surface = [
+    BoxShadow(
+      color: SsmsColors.shadowSurface,
+      blurRadius: 40,
+      offset: Offset(0, 16),
+    ),
+  ];
+
+  static const modal = [
+    BoxShadow(
+      color: SsmsColors.shadowModal,
+      blurRadius: 80,
+      offset: Offset(0, 28),
+    ),
+  ];
+}
+
+/// Typography — Plus Jakarta Sans (UI) + Source Serif 4 (display headings).
 class SsmsType {
   SsmsType._();
 
@@ -40,74 +106,104 @@ class SsmsType {
         fontStyle: fontStyle,
       );
 
-  static TextStyle get display => _jakarta(
-        fontSize: 34,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.9,
-        height: 1.12,
+  static TextStyle _serif({
+    required double fontSize,
+    FontWeight fontWeight = FontWeight.w700,
+    Color color = SsmsColors.ink,
+    double height = 1.15,
+    double letterSpacing = 0,
+  }) =>
+      GoogleFonts.sourceSerif4(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        height: height,
+        letterSpacing: letterSpacing,
       );
 
+  /// Web login / page intro h2
+  static TextStyle get display => _serif(
+        fontSize: 32,
+        fontWeight: FontWeight.w800,
+        height: 1.25,
+      );
+
+  /// Web card h3 / modal contexts
   static TextStyle get title => _jakarta(
-        fontSize: 26,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.4,
-        height: 1.2,
-      );
-
-  /// Large heading alias (same family as [display]).
-  static TextStyle get serifLg => _jakarta(
-        fontSize: 30,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.4,
-        height: 1.15,
-      );
-
-  /// Section heading alias (same family as [title]).
-  static TextStyle get serif => _jakarta(
         fontSize: 24,
-        fontWeight: FontWeight.w700,
-        height: 1.2,
+        fontWeight: FontWeight.w800,
+        height: 1.33,
+      );
+
+  static TextStyle get serifLg => _serif(
+        fontSize: 32,
+        fontWeight: FontWeight.w800,
+        height: 1.25,
+      );
+
+  static TextStyle get serif => _serif(
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+        height: 1.33,
+      );
+
+  /// Web `.page-intro > span` kicker
+  static TextStyle get pageKicker => _jakarta(
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        color: SsmsColors.navy,
+        letterSpacing: 0,
+        height: 1.25,
       );
 
   static TextStyle get kicker => _jakarta(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
         color: SsmsColors.muted,
-        letterSpacing: 1.1,
+        letterSpacing: 0,
         height: 1.25,
       );
 
   static TextStyle get body => _jakarta(
-        fontSize: 15,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
         color: SsmsColors.muted,
-        height: 1.55,
+        height: 1.5,
+      );
+
+  /// Web field label
+  static TextStyle get fieldLabel => _jakarta(
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+        height: 1.35,
       );
 
   static TextStyle get label => _jakarta(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
         height: 1.35,
       );
 
   static TextStyle get meta => _jakarta(
-        fontSize: 13,
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
         color: SsmsColors.muted,
         height: 1.4,
       );
 
+  /// Web `.primary-button`
   static TextStyle get button => _jakarta(
-        fontSize: 16,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.1,
+        fontSize: 14,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0,
       );
 
   static TextStyle get nav => _jakarta(
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.1,
+        letterSpacing: 0,
       );
 
-  /// Root fallback for widgets without an explicit style.
   static TextStyle get root => body.copyWith(color: SsmsColors.ink);
 
   static TextTheme textTheme() {
@@ -136,7 +232,8 @@ class SsmsType {
 }
 
 ThemeData buildSsmsTheme() {
-  const radius = BorderRadius.all(Radius.circular(18));
+  const radiusSm = BorderRadius.all(Radius.circular(SsmsRadii.sm));
+  const radiusMd = BorderRadius.all(Radius.circular(SsmsRadii.md));
   final textTheme = SsmsType.textTheme();
   final jakartaFamily = GoogleFonts.plusJakartaSans().fontFamily;
 
@@ -153,17 +250,22 @@ ThemeData buildSsmsTheme() {
       error: SsmsColors.danger,
     ),
     scaffoldBackgroundColor: SsmsColors.panel,
-    splashColor: SsmsColors.navy.withValues(alpha: 0.06),
+    splashColor: SsmsColors.navy.withValues(alpha: 0.08),
     highlightColor: SsmsColors.navy.withValues(alpha: 0.04),
-    dividerColor: SsmsColors.hairline,
+    dividerColor: SsmsColors.softLine,
     appBarTheme: AppBarTheme(
       elevation: 0,
       scrolledUnderElevation: 0,
       backgroundColor: SsmsColors.panel,
       foregroundColor: SsmsColors.ink,
       systemOverlayStyle: SystemUiOverlayStyle.dark,
-      titleTextStyle: SsmsType.label.copyWith(fontSize: 18),
+      titleTextStyle: SsmsType.label.copyWith(
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+        height: 1.33,
+      ),
       toolbarTextStyle: SsmsType.label.copyWith(fontSize: 16),
+      toolbarHeight: 64,
     ),
     navigationBarTheme: NavigationBarThemeData(
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
@@ -180,100 +282,141 @@ ThemeData buildSsmsTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: SsmsColors.field,
-      hintStyle: SsmsType.body.copyWith(fontSize: 15),
-      labelStyle: SsmsType.label.copyWith(fontSize: 14),
-      floatingLabelStyle: SsmsType.kicker,
+      fillColor: SsmsColors.paper,
+      hintStyle: SsmsType.body.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: SsmsColors.placeholder,
+      ),
+      labelStyle: SsmsType.fieldLabel,
+      floatingLabelStyle: SsmsType.fieldLabel,
       border: const OutlineInputBorder(
-        borderRadius: radius,
-        borderSide: BorderSide.none,
+        borderRadius: radiusSm,
+        borderSide: BorderSide(color: SsmsColors.line),
       ),
       enabledBorder: const OutlineInputBorder(
-        borderRadius: radius,
-        borderSide: BorderSide.none,
+        borderRadius: radiusSm,
+        borderSide: BorderSide(color: SsmsColors.line),
       ),
       focusedBorder: const OutlineInputBorder(
-        borderRadius: radius,
-        borderSide: BorderSide.none,
+        borderRadius: radiusSm,
+        borderSide: BorderSide(color: SsmsColors.navy, width: 1.4),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      errorBorder: const OutlineInputBorder(
+        borderRadius: radiusSm,
+        borderSide: BorderSide(color: SsmsColors.danger),
+      ),
+      focusedErrorBorder: const OutlineInputBorder(
+        borderRadius: radiusSm,
+        borderSide: BorderSide(color: SsmsColors.danger, width: 1.4),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: SsmsColors.navyDark,
         foregroundColor: Colors.white,
         disabledBackgroundColor: const Color(0xFFCDD5DF),
-        minimumSize: const Size.fromHeight(54),
+        minimumSize: const Size.fromHeight(44),
         elevation: 0,
         textStyle: SsmsType.button,
-        shape: const RoundedRectangleBorder(borderRadius: radius),
+        shape: const RoundedRectangleBorder(borderRadius: radiusSm),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: SsmsColors.ink,
-        minimumSize: const Size.fromHeight(52),
+        foregroundColor: SsmsColors.navy,
+        minimumSize: const Size.fromHeight(44),
         side: const BorderSide(color: SsmsColors.line),
-        textStyle: SsmsType.button.copyWith(fontSize: 15),
-        shape: const RoundedRectangleBorder(borderRadius: radius),
+        textStyle: SsmsType.button,
+        shape: const RoundedRectangleBorder(borderRadius: radiusSm),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: SsmsColors.navy,
-        textStyle: SsmsType.button.copyWith(fontSize: 15),
+        foregroundColor: SsmsColors.navyDark,
+        textStyle: SsmsType.button,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       ),
     ),
     dropdownMenuTheme: DropdownMenuThemeData(
-      textStyle: SsmsType.label.copyWith(fontSize: 15),
+      textStyle: SsmsType.label.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
     ),
     listTileTheme: ListTileThemeData(
-      titleTextStyle: SsmsType.label.copyWith(fontSize: 15),
+      titleTextStyle: SsmsType.label.copyWith(fontSize: 14),
       subtitleTextStyle: SsmsType.meta,
+      minVerticalPadding: 8,
     ),
     snackBarTheme: SnackBarThemeData(
+      backgroundColor: SsmsColors.navy,
       contentTextStyle: SsmsType.body.copyWith(color: Colors.white),
+      behavior: SnackBarBehavior.floating,
+      shape: const RoundedRectangleBorder(borderRadius: radiusMd),
     ),
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.selected)) return SsmsColors.accent;
+        if (states.contains(WidgetState.selected)) return SsmsColors.navy;
         return Colors.transparent;
       }),
       checkColor: WidgetStateProperty.all(Colors.white),
       side: const BorderSide(color: SsmsColors.line, width: 1.4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: SsmsColors.paper,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: radius),
-      titleTextStyle: SsmsType.title.copyWith(fontSize: 22),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(SsmsRadii.lg)),
+      titleTextStyle: SsmsType.label.copyWith(fontSize: 22, fontWeight: FontWeight.w900),
       contentTextStyle: SsmsType.body,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: SsmsColors.paper,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(SsmsRadii.lg)),
       ),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: SsmsColors.navyDark,
       foregroundColor: Colors.white,
       elevation: 0,
-      extendedPadding: const EdgeInsets.symmetric(horizontal: 20),
-      extendedTextStyle: SsmsType.button.copyWith(fontSize: 15),
-      shape: const RoundedRectangleBorder(borderRadius: radius),
+      extendedPadding: const EdgeInsets.symmetric(horizontal: 16),
+      extendedTextStyle: SsmsType.button,
+      shape: const RoundedRectangleBorder(borderRadius: radiusSm),
     ),
     drawerTheme: const DrawerThemeData(
-      backgroundColor: SsmsColors.paper,
+      backgroundColor: SsmsColors.navy,
+      width: 280,
     ),
     cardTheme: CardThemeData(
       color: SsmsColors.paper,
       surfaceTintColor: Colors.transparent,
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: const BorderSide(color: SsmsColors.hairline),
+        borderRadius: BorderRadius.circular(SsmsRadii.md),
+        side: const BorderSide(color: SsmsColors.softLine),
+      ),
+      elevation: 0,
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: SsmsColors.blueSoft,
+      selectedColor: SsmsColors.blueSoft,
+      labelStyle: SsmsType.meta.copyWith(
+        color: SsmsColors.navy,
+        fontWeight: FontWeight.w700,
+      ),
+      side: const BorderSide(color: SsmsColors.softLine),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(SsmsRadii.sm)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: const Size(36, 36),
+        foregroundColor: SsmsColors.muted,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(SsmsRadii.sm)),
       ),
     ),
   );

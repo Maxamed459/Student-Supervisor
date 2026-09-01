@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:get/get.dart';
 
@@ -85,17 +85,34 @@ class DashboardController extends GetxController {
   }
 
   Future<void> _loadSupervisor(String supervisorId) async {
-    final results = await Future.wait([
-      api.getGroups(),
-      api.getMilestones(),
-      api.getSupervisorStudents(supervisorId),
-      api.getNotifications(),
-    ]);
+    Object? groupsError;
+    List<dynamic> loadedGroups = [];
+    List<dynamic> loadedMilestones = [];
+    List<dynamic> loadedStudents = [];
+    Map<String, dynamic> loadedNotifications = {};
 
-    groups.assignAll(results[0] as List<dynamic>);
-    milestones.assignAll(results[1] as List<dynamic>);
-    users.assignAll(results[2] as List<dynamic>);
-    _applyNotifications(results[3] as Map<String, dynamic>);
+    try {
+      loadedGroups = await api.getGroups();
+    } catch (exception) {
+      groupsError = exception;
+    }
+
+    try {
+      loadedMilestones = await api.getMilestones();
+    } catch (_) {}
+
+    try {
+      loadedStudents = await api.getSupervisorStudents(supervisorId);
+    } catch (_) {}
+
+    try {
+      loadedNotifications = await api.getNotifications();
+    } catch (_) {}
+
+    groups.assignAll(loadedGroups);
+    milestones.assignAll(loadedMilestones);
+    users.assignAll(loadedStudents);
+    _applyNotifications(loadedNotifications);
     progress.value = null;
     adminDashboard.value = null;
     auditLogs.clear();
@@ -103,52 +120,125 @@ class DashboardController extends GetxController {
 
     final auth = Get.find<AuthController>();
     final current = auth.user.value;
-    if (current?.groupId != null && current!.groupId!.isNotEmpty) {
-      for (final group in groups) {
-        if (field(group, const ['_id', 'id']) == current.groupId) {
-          auth.applyProfile(group: group);
-          break;
+    if (groups.isNotEmpty) {
+      Map<String, dynamic>? matched;
+      if (current?.groupId != null && current!.groupId!.isNotEmpty) {
+        for (final group in groups) {
+          if (group is Map &&
+              field(group, const ['_id', 'id']) == current.groupId) {
+            matched = Map<String, dynamic>.from(group);
+            break;
+          }
         }
       }
+      matched ??= groups.first is Map
+          ? Map<String, dynamic>.from(groups.first as Map)
+          : null;
+      if (matched != null) {
+        auth.applyProfile(group: matched);
+      }
+    } else if (groupsError != null) {
+      error.value =
+          groupsError.toString().replaceFirst('Exception: ', '');
     }
   }
 
   Future<void> _loadStudent(String studentId) async {
-    final results = await Future.wait([
-      api.getMilestones(),
-      api.getStudentSubmissions(studentId),
-      api.getStudentProgress(studentId),
-      api.getNotifications(),
-      api.getStudentSupervisor(studentId),
-      api.getMe(),
-    ]);
+    Object? groupError;
+    List<dynamic> loadedMilestones = [];
+    List<dynamic> loadedSubmissions = [];
+    Map<String, dynamic> loadedProgress = {};
+    Map<String, dynamic> loadedNotifications = {};
+    Map<String, dynamic> supervisorPayload = {};
+    Map<String, dynamic> groupPayload = {};
+    Map<String, dynamic> me = {};
+
+    try {
+      loadedMilestones = await api.getMilestones();
+    } catch (_) {}
+
+    try {
+      loadedSubmissions = await api.getStudentSubmissions(studentId);
+    } catch (_) {}
+
+    try {
+      loadedProgress = await api.getStudentProgress(studentId);
+    } catch (_) {}
+
+    try {
+      loadedNotifications = await api.getNotifications();
+    } catch (_) {}
+
+    try {
+      supervisorPayload = await api.getStudentSupervisor(studentId);
+    } catch (_) {}
+
+    try {
+      groupPayload = await api.getStudentGroup(studentId);
+    } catch (exception) {
+      groupError = exception;
+    }
+
+    try {
+      me = await api.getMe();
+    } catch (_) {}
 
     groups.clear();
-    milestones.assignAll(results[0] as List<dynamic>);
-    submissions.assignAll(results[1] as List<dynamic>);
-    progress.value = results[2] as Map<String, dynamic>;
-    _applyNotifications(results[3] as Map<String, dynamic>);
+    milestones.assignAll(loadedMilestones);
+    submissions.assignAll(loadedSubmissions);
+    progress.value = loadedProgress;
+    _applyNotifications(loadedNotifications);
     users.clear();
     adminDashboard.value = null;
     auditLogs.clear();
 
     final auth = Get.find<AuthController>();
-    final supervisor = results[4] as Map<String, dynamic>?;
-    final me = results[5] as Map<String, dynamic>;
+    final supervisors =
+        (supervisorPayload['supervisors'] as List<dynamic>?) ?? [];
+    dynamic supervisor = supervisorPayload['supervisor'];
+    supervisor ??= supervisors.length == 1 ? supervisors.first : null;
+    if (supervisor == null && supervisors.isNotEmpty) {
+      supervisor = supervisors.first;
+    }
+
+    final groupList = (groupPayload['groups'] as List<dynamic>?) ?? [];
+    dynamic group = groupList.isNotEmpty ? groupList.first : me['group'];
+    if (group == null) {
+      final supervisorGroup = supervisorPayload['group'];
+      if (supervisorGroup is Map) group = supervisorGroup;
+    }
+
+    final meGroupId = me['groupId'];
+    final parsedGroupId = meGroupId == null
+        ? null
+        : (meGroupId is Map ? idOf(meGroupId) : meGroupId.toString().trim());
+
     auth.applyProfile(
-      supervisor: supervisor ?? me['supervisor'],
-      group: me['group'],
+      supervisor: supervisor,
+      group: group,
+      groupId: parsedGroupId?.isNotEmpty == true ? parsedGroupId : null,
     );
 
-    final group = me['group'];
-    if (group is Map && group['members'] is List) {
-      groupMembers.assignAll(group['members'] as List);
+    if (group is Map) {
+      final members = group['students'] ?? group['members'];
+      if (members is List) {
+        groupMembers.assignAll(members);
+      } else {
+        groupMembers.clear();
+      }
       groupDetail.value = Map<String, dynamic>.from(group);
     } else {
-      groupDetail.value = group is Map
-          ? Map<String, dynamic>.from(group)
-          : null;
+      groupDetail.value = null;
       groupMembers.clear();
+    }
+
+    if (groupList.isEmpty &&
+        (parsedGroupId == null || parsedGroupId.isEmpty) &&
+        groupError != null) {
+      error.value =
+          groupError.toString().replaceFirst('Exception: ', '');
+    } else {
+      error.value = '';
     }
   }
 
@@ -217,7 +307,7 @@ class DashboardController extends GetxController {
 
   Future<bool> submitWork({
     required String milestoneId,
-    required File file,
+    required Uint8List fileBytes,
     required String originalFilename,
     String? note,
   }) async {
@@ -225,7 +315,7 @@ class DashboardController extends GetxController {
     actionError.value = '';
     try {
       final uploaded = await api.uploadFile(
-        file: file,
+        bytes: fileBytes,
         originalFilename: originalFilename,
         folder: 'submissions',
       );
@@ -248,16 +338,16 @@ class DashboardController extends GetxController {
     required String title,
     String? description,
     String? dueDate,
-    File? file,
+    Uint8List? fileBytes,
     String? originalFilename,
   }) async {
     actionLoading.value = true;
     actionError.value = '';
     try {
       List<Map<String, dynamic>>? attachments;
-      if (file != null && originalFilename != null) {
+      if (fileBytes != null && originalFilename != null) {
         final uploaded = await api.uploadFile(
-          file: file,
+          bytes: fileBytes,
           originalFilename: originalFilename,
           folder: 'milestones',
         );
@@ -358,6 +448,29 @@ class DashboardController extends GetxController {
     }
   }
 
+  List<dynamic> _mergeGroupRoster(Map<String, dynamic> data) {
+    final group = data['group'];
+    final roster = <dynamic>[
+      ...((data['members'] as List<dynamic>?) ?? []),
+      ...((data['supervisors'] as List<dynamic>?) ?? []),
+    ];
+    if (group is Map) {
+      roster.addAll((group['students'] as List<dynamic>?) ?? []);
+      roster.addAll((group['supervisors'] as List<dynamic>?) ?? []);
+    }
+    final seen = <String>{};
+    final unique = <dynamic>[];
+    for (final member in roster) {
+      final memberId = field(member, const ['_id', 'id']);
+      if (memberId.isEmpty) {
+        unique.add(member);
+        continue;
+      }
+      if (seen.add(memberId)) unique.add(member);
+    }
+    return unique;
+  }
+
   Future<Map<String, dynamic>?> loadGroupDetail(String id) async {
     actionLoading.value = true;
     actionError.value = '';
@@ -366,7 +479,7 @@ class DashboardController extends GetxController {
       groupDetail.value = data['group'] is Map
           ? Map<String, dynamic>.from(data['group'] as Map)
           : data;
-      groupMembers.assignAll((data['members'] as List<dynamic>?) ?? []);
+      groupMembers.assignAll(_mergeGroupRoster(data));
       return data;
     } catch (exception) {
       actionError.value = exception.toString().replaceFirst('Exception: ', '');
@@ -374,6 +487,53 @@ class DashboardController extends GetxController {
     } finally {
       actionLoading.value = false;
     }
+  }
+
+  String? _milestoneGroupId(dynamic milestone) {
+    final group = milestone is Map ? milestone['group'] : null;
+    if (group is Map) {
+      return field(group, const ['_id', 'id']);
+    }
+    if (group != null) return group.toString();
+    return field(milestone, const ['groupId']);
+  }
+
+  String? _submissionGroupId(dynamic submission) {
+    if (submission is! Map) return null;
+    final direct = field(submission, const ['groupId']);
+    if (direct.isNotEmpty) return direct;
+    final group = submission['group'];
+    if (group is Map) return field(group, const ['_id', 'id']);
+    if (group != null) return group.toString();
+    final milestone = submission['milestone'] ?? submission['milestoneId'];
+    if (milestone is Map) return _milestoneGroupId(milestone);
+    return null;
+  }
+
+  bool _hasDueDate(dynamic milestone) {
+    return field(milestone, const ['dueAt', 'dueDate']).isNotEmpty;
+  }
+
+  List<dynamic> milestonesForGroup(String groupId) {
+    return milestones.where((item) {
+      final gid = _milestoneGroupId(item);
+      return gid != null && gid == groupId;
+    }).toList();
+  }
+
+  List<dynamic> guidelinesForGroup(String groupId) {
+    return milestonesForGroup(groupId).where((item) => !_hasDueDate(item)).toList();
+  }
+
+  List<dynamic> tasksForGroup(String groupId) {
+    return milestonesForGroup(groupId).where(_hasDueDate).toList();
+  }
+
+  List<dynamic> submissionsForGroup(String groupId) {
+    return submissions.where((item) {
+      final gid = _submissionGroupId(item);
+      return gid != null && gid == groupId;
+    }).toList();
   }
 
   Future<bool> addComment({

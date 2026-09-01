@@ -49,7 +49,7 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
             padding: const EdgeInsets.only(bottom: 28),
             children: [
               const SsmsPageHead(
-                kicker: 'SSMS WORKSPACE',
+                kicker: 'SSMS Workspace',
                 title: 'Audit Logs',
                 detail:
                     'Readable history of who did what, who was affected, and when.',

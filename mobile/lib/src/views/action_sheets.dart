@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +11,19 @@ import '../controllers/dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/display.dart';
 import '../widgets/ssms_chrome.dart';
+
+Future<({Uint8List bytes, String name})?> _pickDocumentFile() async {
+  final result = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: const ['pdf', 'doc', 'docx'],
+    withData: true,
+  );
+  if (result == null || result.files.isEmpty) return null;
+  final file = result.files.single;
+  final bytes = file.bytes;
+  if (bytes == null) return null;
+  return (bytes: bytes, name: file.name);
+}
 
 Future<void> openSecureUrl(String? url) async {
   if (url == null || url.isEmpty) return;
@@ -40,7 +53,7 @@ Future<void> showSubmitWorkSheet(
     selectedMilestoneId = field(milestones.first, const ['_id', 'id']);
   }
   final note = TextEditingController();
-  File? picked;
+  Uint8List? pickedBytes;
   String? fileName;
   final lockedMilestone = milestoneId != null && milestoneId.isNotEmpty;
 
@@ -71,7 +84,7 @@ Future<void> showSubmitWorkSheet(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: SsmsColors.field,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(SsmsRadii.md),
                 ),
                 child: Text(
                   titleOf(
@@ -117,17 +130,11 @@ Future<void> showSubmitWorkSheet(
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: const ['pdf', 'doc', 'docx'],
-                  withData: false,
-                );
-                if (result == null || result.files.isEmpty) return;
-                final file = result.files.single;
-                if (file.path == null) return;
+                final picked = await _pickDocumentFile();
+                if (picked == null) return;
                 setState(() {
-                  picked = File(file.path!);
-                  fileName = file.name;
+                  pickedBytes = picked.bytes;
+                  fileName = picked.name;
                 });
               },
               icon: const Icon(Icons.attach_file, size: 18),
@@ -150,7 +157,7 @@ Future<void> showSubmitWorkSheet(
                         : () async {
                             if (selectedMilestoneId == null ||
                                 selectedMilestoneId!.isEmpty ||
-                                picked == null ||
+                                pickedBytes == null ||
                                 fileName == null) {
                               controller.actionError.value =
                                   'Select a milestone and a file.';
@@ -158,7 +165,7 @@ Future<void> showSubmitWorkSheet(
                             }
                             final ok = await controller.submitWork(
                               milestoneId: selectedMilestoneId!,
-                              file: picked!,
+                              fileBytes: pickedBytes!,
                               originalFilename: fileName!,
                               note: note.text,
                             );
@@ -191,7 +198,7 @@ Future<void> showPublishGuidelineSheet(BuildContext context) async {
   final title = TextEditingController();
   final description = TextEditingController();
   DateTime? dueDate;
-  File? picked;
+  Uint8List? pickedBytes;
   String? fileName;
 
   await showSsmsSheet(
@@ -245,23 +252,18 @@ Future<void> showPublishGuidelineSheet(BuildContext context) async {
                       setState(() => dueDate = pickedDate);
                     }
                   },
-                  child: Text('Set date'),
+                  child: const Text('Set date'),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () async {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: const ['pdf', 'doc', 'docx'],
-                );
-                if (result == null || result.files.isEmpty) return;
-                final file = result.files.single;
-                if (file.path == null) return;
+                final picked = await _pickDocumentFile();
+                if (picked == null) return;
                 setState(() {
-                  picked = File(file.path!);
-                  fileName = file.name;
+                  pickedBytes = picked.bytes;
+                  fileName = picked.name;
                 });
               },
               icon: const Icon(Icons.attach_file, size: 18),
@@ -293,7 +295,7 @@ Future<void> showPublishGuidelineSheet(BuildContext context) async {
                               dueDate: dueDate == null
                                   ? null
                                   : DateFormat('yyyy-MM-dd').format(dueDate!),
-                              file: picked,
+                              fileBytes: pickedBytes,
                               originalFilename: fileName,
                             );
                             if (ok && context.mounted) {
@@ -384,7 +386,7 @@ Future<void> showEditGuidelineSheet(
                     height: 44,
                     decoration: BoxDecoration(
                       color: SsmsColors.paper,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(SsmsRadii.md),
                     ),
                     child: const Icon(
                       Icons.event_rounded,
@@ -439,7 +441,7 @@ Future<void> showEditGuidelineSheet(
                       }
                     },
                     icon: const Icon(Icons.edit_calendar_rounded, size: 18),
-                    label: Text('Change date'),
+                    label: const Text('Change date'),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -581,13 +583,13 @@ Widget fileChip(Map file) {
   final url = field(file, const ['secureUrl']);
   return InkWell(
     onTap: url.isEmpty ? null : () => openSecureUrl(url),
-    borderRadius: BorderRadius.circular(14),
+    borderRadius: BorderRadius.circular(SsmsRadii.md),
     child: Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: SsmsColors.field,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(SsmsRadii.md),
         border: Border.all(color: SsmsColors.hairline),
       ),
       child: Row(
