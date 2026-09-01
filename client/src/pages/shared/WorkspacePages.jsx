@@ -4,11 +4,13 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
+  BarChart3,
   Bell,
   BookOpen,
   CheckCircle2,
   ClipboardList,
   Copy,
+  Download,
   ExternalLink,
   Eye,
   FileText,
@@ -30,7 +32,7 @@ import {
   patchResource,
   updateMe,
 } from '../../services/apiClient';
-import { useResource, useDashboardData, useGroupDetail } from '../../hooks/useResources';
+import { useResource, useDashboardData, useGroupDetail, useAdminDashboard, useAdminReports } from '../../hooks/useResources';
 import { useToast } from '../../context/useToast';
 import { formatDate, label, getFileCategory, formatRelativeTime, formatAuditAction, auditActionBadgeValue } from '../../utils/format';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
@@ -46,9 +48,11 @@ import {
   DataTable,
   Field,
   FullPageState,
+  MetricCard,
   MutationError,
   PageIntro,
   RefreshButton,
+  StatusBars,
   TableState,
 } from '../../components/common';
 import { FormDialog } from '../../components/dialogs';
@@ -61,11 +65,14 @@ import { FeedbackReplyForm, FileViewerDialog, ReviewControls, SubmissionFiles } 
 export function Dashboard({ role }) {
   const user = useSelector((state) => state.auth.user);
   const data = useDashboardData(role);
+  const adminDashboard = useAdminDashboard(role === 'admin');
   const submissions = data.submissions.data || [];
   const groups = data.groups.data || [];
   const milestones = data.milestones.data || [];
   const students = data.students.data || [];
   const pendingReviews = submissions.filter((item) => item.status === 'pending');
+  const totals = adminDashboard.data?.totals || {};
+  const activity = adminDashboard.data?.submissionActivity || {};
 
   const todaySubmissions = countCreatedToday(submissions);
   const todayMilestones = countCreatedToday(milestones);
@@ -78,7 +85,7 @@ export function Dashboard({ role }) {
         {
           key: 'groups',
           label: 'Groups',
-          value: groups.length,
+          value: totals.totalGroups ?? groups.length,
           delta: todayMilestones ? `+${todayMilestones} today` : null,
           linkTo: '/admin/groups',
           tone: 'blue',
@@ -86,9 +93,9 @@ export function Dashboard({ role }) {
         {
           key: 'students',
           label: 'Students',
-          value: students.length,
-          delta: todaySubmissions ? `+${todaySubmissions} today` : null,
-          linkTo: '/admin/users',
+          value: totals.totalStudents ?? students.length,
+          delta: activity.pending ? `${activity.pending} pending reviews` : (todaySubmissions ? `+${todaySubmissions} today` : null),
+          linkTo: '/admin/reports',
           tone: 'green',
         },
       ]
@@ -130,9 +137,9 @@ export function Dashboard({ role }) {
 
   const cta = role === 'admin'
     ? {
-        text: 'Create groups, assign supervisors, and manage student accounts from a single workspace.',
-        actionLabel: 'Manage groups',
-        actionTo: '/admin/groups',
+        text: 'Review group progress, overdue milestones, and supervisor load in the reports workspace.',
+        actionLabel: 'Open reports',
+        actionTo: '/admin/reports',
       }
     : role === 'supervisor'
       ? {
@@ -169,6 +176,195 @@ export function Dashboard({ role }) {
       </div>
 
       <DashboardActivityChart submissions={submissions} />
+    </section>
+  );
+}
+
+function downloadCsv(filename, rows) {
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// ----------------------- Admin reports -----------------------
+
+export function ReportsScreen() {
+  const groups = useResource('groups', true);
+  const [groupId, setGroupId] = useState('');
+  const reports = useAdminReports(groupId);
+  const summary = reports.data?.summary || {};
+  const groupRows = reports.data?.groups || [];
+  const overdue = reports.data?.overdue || [];
+  const supervisors = reports.data?.supervisors || [];
+  const unassigned = reports.data?.unassignedStudents || [];
+
+  const exportGroups = () => {
+    downloadCsv('ssms-group-progress.csv', [
+      ['Group', 'Code', 'Students', 'Supervisors', 'Milestones', 'Approved', 'Pending', 'Changes requested', 'Not submitted', 'Overdue', 'Completion %'],
+      ...groupRows.map((row) => [
+        row.name,
+        row.code || '',
+        row.studentCount,
+        row.supervisorCount,
+        row.milestoneCount,
+        row.approved,
+        row.pending,
+        row.changesRequested,
+        row.notSubmitted,
+        row.overdueCount,
+        row.completionPercent,
+      ]),
+    ]);
+  };
+
+  return (
+    <section className="page-stack">
+      <PageIntro
+        title="Reports"
+        subtitle="Platform progress aggregated from groups, milestones, and submissions. Nothing is stored as a separate report record."
+      />
+
+      <Card
+        title="Filters"
+        description={reports.data?.generatedAt ? `Generated ${formatDate(reports.data.generatedAt)}` : 'Live snapshot from current workspace data.'}
+        action={(
+          <div className="row-actions">
+            <button className="primary-button inline" onClick={exportGroups} type="button">
+              <Download size={15} />
+              Export CSV
+            </button>
+            <RefreshButton queryKey={['adminReports']} />
+          </div>
+        )}
+      >
+        <div className="users-filters">
+          <label className="field">
+            <span>Group</span>
+            <select onChange={(event) => setGroupId(event.target.value)} value={groupId}>
+              <option value="">All groups</option>
+              {(groups.data || []).map((group) => (
+                <option key={group._id} value={group._id}>{group.code || group.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {reports.isError ? (
+          <p className="field-error">
+            {reports.error?.response?.data?.message || reports.error?.message || 'Failed to load reports.'}
+          </p>
+        ) : null}
+      </Card>
+
+      <div className="metric-grid">
+        <MetricCard caption="Across the current filter" icon={Users} title="Students" value={summary.totalStudents ?? 0} />
+        <MetricCard caption={`${summary.totalGroups ?? 0} groups`} icon={BookOpen} title="Groups" value={summary.totalGroups ?? 0} />
+        <MetricCard caption={`${summary.completionPercent ?? 0}% approved vs expected`} icon={BarChart3} title="Completion" value={`${summary.completionPercent ?? 0}%`} />
+        <MetricCard caption="Past due and not approved" icon={AlertCircle} title="Overdue" value={summary.overdue ?? 0} />
+        <MetricCard caption="Students with no group" icon={UserRound} title="Unassigned" value={summary.unassignedStudents ?? 0} />
+        <MetricCard caption="More than one version submitted" icon={FileText} title="Resubmitted" value={summary.resubmitted ?? 0} />
+      </div>
+
+      <Card title="Submission pipeline" description="Expected work is students × published milestones in the selected groups.">
+        {reports.isLoading ? (
+          <TableState text="Loading report…" />
+        ) : (
+          <StatusBars
+            counts={{
+              approved: summary.approved || 0,
+              pending: summary.pending || 0,
+              changes_requested: summary.changesRequested || 0,
+              not_submitted: summary.notSubmitted || 0,
+            }}
+          />
+        )}
+      </Card>
+
+      <Card title="Group progress">
+        <DataTable
+          columns={[
+            ['Group', (row) => (
+              <Link to={`/admin/groups/${row._id}`}>{row.name}</Link>
+            )],
+            ['Students', (row) => row.studentCount],
+            ['Milestones', (row) => row.milestoneCount],
+            ['Approved', (row) => row.approved],
+            ['Pending', (row) => row.pending],
+            ['Not submitted', (row) => row.notSubmitted],
+            ['Overdue', (row) => row.overdueCount],
+            ['Completion', (row) => `${row.completionPercent}%`],
+          ]}
+          data={groupRows}
+          empty={{
+            icon: BarChart3,
+            title: 'No groups to report',
+            text: 'Create a group and assign students to see progress here.',
+          }}
+          loading={reports.isLoading}
+        />
+      </Card>
+
+      <Card title="Overdue work" description="Published milestones past their due date where the student is not approved.">
+        <DataTable
+          columns={[
+            ['Student', (row) => (
+              <div className="audit-actor-cell">
+                <strong>{row.studentName}</strong>
+                {row.studentEmail ? <small>{row.studentEmail}</small> : null}
+              </div>
+            )],
+            ['Group', (row) => row.groupName],
+            ['Milestone', (row) => row.milestoneTitle],
+            ['Due', (row) => formatDate(row.dueDate)],
+            ['Status', (row) => <Badge value={row.status} />],
+          ]}
+          data={overdue}
+          empty={{
+            icon: CheckCircle2,
+            title: 'Nothing overdue',
+            text: 'No published milestones are past due with unfinished student work.',
+          }}
+          loading={reports.isLoading}
+        />
+      </Card>
+
+      <Card title="Supervisor load">
+        <DataTable
+          columns={[
+            ['Supervisor', (row) => (
+              <div className="audit-actor-cell">
+                <strong>{row.fullName}</strong>
+                {row.email ? <small>{row.email}</small> : null}
+              </div>
+            )],
+            ['Groups', (row) => row.groupCount],
+            ['Students', (row) => row.studentCount],
+          ]}
+          data={supervisors}
+          empty="No supervisors to report."
+          loading={reports.isLoading}
+        />
+      </Card>
+
+      {!groupId ? (
+        <Card title="Unassigned students" description="Students who are not in a group yet.">
+          <DataTable
+            columns={[
+              ['Name', (row) => row.fullName],
+              ['Email', (row) => row.email],
+            ]}
+            data={unassigned}
+            empty="Every student is assigned to a group."
+            loading={reports.isLoading}
+          />
+        </Card>
+      ) : null}
     </section>
   );
 }

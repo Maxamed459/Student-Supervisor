@@ -321,6 +321,15 @@ export async function deleteResource(path) {
   return unwrapResponse(await api.delete(path));
 }
 
+export async function fetchAdminDashboard() {
+  return unwrapResponse(await api.get('/admin/dashboard'));
+}
+
+export async function fetchAdminReports(groupId) {
+  const params = groupId ? { groupId } : undefined;
+  return unwrapResponse(await api.get('/admin/reports', { params }));
+}
+
 export async function createUploadSignature(payload = {}) {
   const data = unwrapResponse(await api.post('/uploads/signature', payload));
   return data.upload || data;

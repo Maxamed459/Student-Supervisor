@@ -1,6 +1,7 @@
 import {
   Bell,
   BookOpen,
+  BarChart3,
   LayoutDashboard,
   ShieldCheck,
   UserCog,
@@ -14,8 +15,9 @@ export const roleRoutes = {
     ['Dashboard', '/admin/dashboard', LayoutDashboard],
     ['Users', '/admin/users', Users],
     ['Groups', '/admin/groups', BookOpen],
-    ['Audit Logs', '/admin/audit-logs', ShieldCheck],
     ['Notifications', '/admin/notifications', Bell],
+    ['Audit Logs', '/admin/audit-logs', ShieldCheck],
+    ['Reports', '/admin/reports', BarChart3],
     ['Profile', '/admin/profile', UserCog],
   ],
   supervisor: [

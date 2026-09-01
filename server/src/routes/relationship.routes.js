@@ -5,6 +5,7 @@ import {
   listStudentsForSupervisor,
   getSupervisorForStudent,
   getAdminDashboard,
+  getAdminReports,
 } from '../controllers/relationship.controller.js';
 import { listMilestonesForStudent } from '../controllers/milestone.controller.js';
 import { getStudentProgress, listSubmissionsForStudent } from '../controllers/submission.controller.js';
@@ -67,5 +68,6 @@ router.get(
 
 // FR-A5, FR-A6
 router.get('/admin/dashboard', authenticate, authorize('admin'), getAdminDashboard);
+router.get('/admin/reports', authenticate, authorize('admin'), getAdminReports);
 
 export default router;

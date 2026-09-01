@@ -20,6 +20,7 @@ import {
   MilestonesScreen,
   NotificationsScreen,
   ProfileScreen,
+  ReportsScreen,
   StudentFeedbackScreen,
   StudentGroupScreen,
   StudentSupervisorScreen,
@@ -133,6 +134,7 @@ export function ProtectedLayout() {
           ) : (
             <Routes>
               <Route path="/admin/dashboard" element={<Dashboard role="admin" />} />
+              <Route path="/admin/reports" element={<ReportsScreen />} />
               <Route path="/admin/users" element={<UsersScreen allowCreate title="Users" />} />
               <Route path="/admin/groups" element={<GroupsScreen allowManage />} />
               <Route path="/admin/groups/:id" element={<GroupWorkspaceScreen role="admin" />} />

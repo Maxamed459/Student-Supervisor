@@ -446,6 +446,11 @@ you have is a milestone.
 }
 ```
 
+### `GET /admin/reports` 🔒 admin
+Live snapshot aggregated from User, Group, Milestone, and Submission (no Report model). Optional `?groupId=`.
+
+**Response `data`:** `generatedAt`, `summary`, `groups[]`, `overdue[]`, `unassignedStudents[]`, `supervisors[]`.
+
 ---
 
 ## 12. Quick reference table
@@ -494,6 +499,7 @@ you have is a milestone.
 | GET | /students/:id/progress | Admin, their supervisor, that student | Milestone completion stats |
 | GET | /students/:id/submissions | Admin, their supervisor, that student | A student's full submission history |
 | GET | /admin/dashboard | Admin | Platform-wide stats |
+| GET | /admin/reports | Admin | Group progress / overdue report |
 
 ---
 
