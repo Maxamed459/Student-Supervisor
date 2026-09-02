@@ -18,39 +18,62 @@ const defaultDevOrigins = [
   'http://127.0.0.1:5174',
 ];
 
-// Allow a comma-separated list in CLIENT_URL, e.g.
-//   CLIENT_URL="http://localhost:5173,http://127.0.0.1:5173"
 const configuredOrigins = (process.env.CLIENT_URL || '')
   .split(',')
-  .map((s) => s.trim().replace(/\/+$/, '')) // strip trailing slashes
+  .map((s) => s.trim().replace(/\/+$/, ''))
   .filter(Boolean);
 
 const allowedOrigins = [
   ...new Set([
     ...configuredOrigins,
-    ...(process.env.NODE_ENV === 'production' ? [] : defaultDevOrigins),
+    ...(process.env.NODE_ENV !== 'production'
+      ? defaultDevOrigins
+      : []),
   ]),
 ];
 
-const isAllowedDevOrigin = (origin) => {
-  if (process.env.NODE_ENV === 'production') return false;
-  return /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
-};
-
 app.use(
   cors({
-    origin: (origin, cb) => {
-      // Same-origin / curl / server-to-server requests have no Origin header
-      if (!origin) return cb(null, true);
-      const normalizedOrigin = origin.replace(/\/+$/, '');
-      if (allowedOrigins.includes(normalizedOrigin) || isAllowedDevOrigin(normalizedOrigin)) {
-        return cb(null, true);
+    origin: (origin, callback) => {
+      // Requests without an Origin header
+      if (!origin) {
+        return callback(null, true);
       }
-      return cb(new Error(`CORS: origin ${origin} not allowed`));
+
+      const normalizedOrigin = origin.replace(/\/+$/, '');
+
+      console.log('[CORS] Origin:', normalizedOrigin);
+      console.log('[CORS] Allowed:', allowedOrigins);
+
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        return callback(null, true);
+      }
+
+      console.error(
+        `[CORS] BLOCKED origin: ${normalizedOrigin}`
+      );
+
+      return callback(
+        new Error(`CORS: origin ${normalizedOrigin} not allowed`)
+      );
     },
+
     credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+
+    methods: [
+      'GET',
+      'POST',
+      'PATCH',
+      'PUT',
+      'DELETE',
+      'OPTIONS',
+    ],
+
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+    ],
+
     optionsSuccessStatus: 204,
   })
 );
